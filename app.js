@@ -130,7 +130,7 @@ function renderConsent(){
  <div class="consent-item"><span class="consent-icon amber" aria-hidden="true">▤</span><div><h2>Purpose of the research</h2><p>Modern generative AI systems can create images resembling the visual styles of existing artworks. Researchers have proposed methods that modify digital artwork to reduce the ability of AI models to imitate an artist's style.</p><p>MIRAGE investigates protection techniques for artistic styles. This study compares the visual results of different protection methods using human judgments, including conditions where attempts have been made to remove protections.</p></div></div>
  <div class="consent-item"><span class="consent-icon violet" aria-hidden="true">▧</span><div><h2>What will you be asked to do?</h2><p>You will first review six reference artworks by an assigned artist and complete seven guided practice comparisons. You will then evaluate ${pairScreens} pairs of AI-generated images and ${robustnessScreens} robustness sets. You will answer ${evalQuestionText}. In the robustness section, you will compare only the six protected methods after a removal attack; no clean baseline is shown.</p><p>Artistic style may include color palette, brushwork, line quality, texture, shading, composition, and overall appearance. Protection method identities are hidden, and image order is randomized. Your judgments in the main evaluation have no predetermined correct or incorrect answers.</p></div></div>
  <div class="consent-duo"><div class="consent-item"><span class="consent-icon green" aria-hidden="true">◷</span><div><h2>Study duration and format</h2><p>The study contains <strong>${mainScreens} main evaluation screens</strong>, following seven practice exercises. Completion time varies depending on how long you inspect the images. A laptop or desktop with a sufficiently large screen is recommended. You may take short breaks and should avoid discussing your judgments with others while completing the study.</p></div></div><div class="consent-item"><span class="consent-icon rose" aria-hidden="true">◇</span><div><h2>Possible risks or discomforts</h2><p>Viewing images and making repeated comparisons may cause temporary eye strain, fatigue, or boredom. You may stop at any time.</p></div></div></div>
- <div class="consent-trio"><div class="consent-item"><span class="consent-icon blue" aria-hidden="true">▥</span><div><h2>Benefits</h2><p>You may not receive any direct personal benefit. Your responses may help researchers evaluate techniques intended to protect artistic work from unauthorized imitation by generative AI.</p></div></div><div class="consent-item"><span class="consent-icon amber" aria-hidden="true">♙</span><div><h2>Privacy and confidentiality</h2><p>After consent, you will be asked for your name and email address for research administration. These details will not be published or included in publicly shared research results. They are stored separately from evaluation responses and linked through a participant identifier. Your responses are associated with a randomly generated session identifier and may include image selections, experimental conditions, and time spent on individual comparisons. Findings may be reported in aggregate in academic publications or presentations.</p><p>${manifest.config.response_endpoint?'At completion, the site will attempt to send them to the configured research collection service; you can also download a copy.':'Responses are saved in this browser, not automatically transmitted. At completion, download your response file and send it through the researcher’s approved channel.'}</p></div></div><div class="consent-item"><span class="consent-icon violet" aria-hidden="true">◎</span><div><h2>Voluntary participation</h2><p>Participation is voluntary. You may decline or stop before submission without giving a reason. Your decision will not affect your relationship with the researchers or their institution.</p></div></div></div>
+ <div class="consent-trio"><div class="consent-item"><span class="consent-icon blue" aria-hidden="true">▥</span><div><h2>Benefits</h2><p>You may not receive any direct personal benefit. Your responses may help researchers evaluate techniques intended to protect artistic work from unauthorized imitation by generative AI.</p></div></div><div class="consent-item"><span class="consent-icon amber" aria-hidden="true">♙</span><div><h2>Privacy and confidentiality</h2><p>After consent, you will be asked for your name and email address for research administration. These details will not be published or included in publicly shared research results. They are stored separately from evaluation responses and linked through a participant identifier. Your responses are associated with a randomly generated session identifier and may include image selections, experimental conditions, and time spent on individual comparisons. Findings may be reported in aggregate in academic publications or presentations.</p><p>${manifest.config.response_endpoint?'During the main evaluation, your study responses are securely autosaved to the configured research collection service. A final complete response is submitted when you finish the study; you can also download a backup copy.':'Responses are saved in this browser, not automatically transmitted. At completion, download your response file and send it through the researcher’s approved channel.'}</p></div></div><div class="consent-item"><span class="consent-icon violet" aria-hidden="true">◎</span><div><h2>Voluntary participation</h2><p>Participation is voluntary. You may decline or stop before submission without giving a reason. Your decision will not affect your relationship with the researchers or their institution.</p></div></div></div>
  <div class="consent-item"><span class="consent-icon blue" aria-hidden="true">✓</span><div><h2>Consent to participate</h2><p>By selecting “I agree to participate,” you confirm that you have read this information, understand the study procedures and voluntary nature of participation, understand how responses will be used, and agree to participate.</p></div></div>
  </div><div class="decision-panel"><button id="consentNo" type="button" class="quiet-button">I do not agree</button><button id="consentYes" type="button">I agree to participate →</button></div><p id="consentMessage" class="tiny" aria-live="polite"></p></div></div>`;
  setButton('Please choose above',false);
@@ -215,7 +215,13 @@ function questionForm(trial,labels,isAttack=false){
 function answers(trial,isAttack=false){const out={};for(const [key] of trialQuestions(trial,isAttack)){const el=content.querySelector(`[name="q_${key}"]:checked`);if(!el)return null;out[key]=el.value}return out}
 function bindAnswers(trial,isAttack,fn){const n=trialQuestions(trial,isAttack).length;const update=()=>setButton(`Submit ${n} answers →`,!!answers(trial,isAttack),fn);content.querySelectorAll('input[type=radio]').forEach(el=>el.onchange=update);update()}
 function evaluationBlock(trial,isAttack,index,total){const labels=trial.choices.map(c=>c.label);const n=trialQuestions(trial,isAttack).length;const caption=!isAttack&&trial.caption&&String(trial.caption).trim()?`<div class="prompt"><span>AI-generated caption:</span> ${safe(trial.caption)}</div>`:'';const guidance=isAttack?`All six images were generated after the same removal attack and correspond to the same target artist and generation prompt. Method names are hidden and image positions are randomized. For each question, select the image that best matches the criterion being asked.`:`One image was generated from a model trained on clean artwork and the other from a model trained on protected artwork. Their positions are randomized and method names are hidden. Please answer all ${n} questions.`;return `<span class="pill">${isAttack?'Robustness evaluation':'Protection evaluation'} · ${index+1} of ${total}</span><h1>${isAttack?'Compare six protected outputs after removal':'Compare two AI-generated images'}</h1><p class="sub">${guidance}</p><details class="smallref"><summary>View reference artworks for this artist</summary>${references()}</details><div class="prompt"><span>Generation prompt:</span> ${safe(trial.prompt)}</div>${caption}<div class="${isAttack?'attack-gallery':'gallery2 pair-gallery'}">${trial.choices.map(c=>imagePanel(c.url,c.label)).join('')}</div><h2>Your evaluations</h2>${questionForm(trial,labels,isAttack)}`}
-function recordAnswer(section,trial,chosen){const item={section,trial_id:trial.id,prompt_id:trial.prompt_id,attack:trial.attack||null,displayed_choices:trial.choices.map(c=>({label:c.label,method:c.method,url:c.url})),answers:chosen,time_ms:Date.now()-startTick,submitted_at:new Date().toISOString()};const i=session.answers.findIndex(a=>a.section===section&&a.trial_id===trial.id);if(i>=0)session.answers[i]=item;else session.answers.push(item);save()}
+function recordAnswer(section,trial,chosen){
+ const item={section,trial_id:trial.id,prompt_id:trial.prompt_id,attack:trial.attack||null,displayed_choices:trial.choices.map(c=>({label:c.label,method:c.method,url:c.url})),answers:chosen,time_ms:Date.now()-startTick,submitted_at:new Date().toISOString()};
+ const i=session.answers.findIndex(a=>a.section===section&&a.trial_id===trial.id);
+ if(i>=0)session.answers[i]=item;else session.answers.push(item);
+ save();
+ autosaveOnline();
+}
 function renderPair(){stage='pairs';session.progress={stage,practice:7,pair:trialIndex,attack:attackIndex};save();startTick=Date.now();const trial=study.pairs[trialIndex];setHeader(`Step 3 / 5 · Protection evaluation ${trialIndex+1} of ${study.pairs.length}`,34+(trialIndex/study.pairs.length)*36);if(trialIndex>0)setBackButton(true,()=>{trialIndex--;renderPair();window.scrollTo(0,0)});content.innerHTML=evaluationBlock(trial,false,trialIndex,study.pairs.length);const submit=()=>{const a=answers(trial,false);if(!a)return;recordAnswer('pairs',trial,a);trialIndex++;if(trialIndex===study.pairs.length){attackIndex=0;renderAttack()}else renderPair();window.scrollTo(0,0)};bindAnswers(trial,false,submit)}
 function renderAttack(){stage='attacks';session.progress={stage,practice:7,pair:study.pairs.length,attack:attackIndex};save();startTick=Date.now();const trial=study.attacks[attackIndex];setHeader(`Step 4 / 5 · Robustness evaluation ${attackIndex+1} of ${study.attacks.length}`,72+(attackIndex/study.attacks.length)*25);setBackButton(true,()=>{if(attackIndex>0){attackIndex--;renderAttack()}else{trialIndex=study.pairs.length-1;renderPair()}window.scrollTo(0,0)});content.innerHTML=evaluationBlock(trial,true,attackIndex,study.attacks.length);const submit=()=>{const a=answers(trial,true);if(!a)return;recordAnswer('attacks',trial,a);attackIndex++;if(attackIndex===study.attacks.length){renderPostStudy()}else renderAttack();window.scrollTo(0,0)};bindAnswers(trial,true,submit)}
 function renderPostStudy(){
@@ -231,19 +237,92 @@ function renderPostStudy(){
  const submit=()=>{if(!valid()){$('postStudyError').textContent='Please respond to all ten statements.';return}session.post_study={...collect(),submitted_at:new Date().toISOString()};delete session.post_study_draft;session.completed_at=new Date().toISOString();session.progress.stage='finish';save();renderFinish();window.scrollTo(0,0)};
  form.addEventListener('change',saveDraft);$('postStudyConcern').addEventListener('input',saveDraft);form.addEventListener('submit',e=>{e.preventDefault();submit()});setButton('Complete study →',valid(),submit);
 }
-function getResponsePayload(){const contact=JSON.parse(localStorage.getItem('mirage_contact_'+session.pid)||'null');return {participant_information:contact?{full_name:contact.full_name,email:contact.email,collected_at:contact.collected_at}:null,format_version:'mirage-github-pages-v6',study_title:manifest.config.study_title,participant_id:session.pid,artist:session.artist,created_at:session.created_at,completed_at:session.completed_at,consent:session.consent||null,background:session.background||null,artist_background:session.artist_background||null,post_study:session.post_study||null,study_mode:manifest.config.study_mode,assignments:{pairs:session.pairs,attacks:session.attacks},responses:session.answers}}
-function downloadResponses(){const result=getResponsePayload();const blob=new Blob([JSON.stringify(result,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`mirage_${session.pid}.json`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000)}
+function getResponsePayload(){
+ const contact=JSON.parse(localStorage.getItem('mirage_contact_'+session.pid)||'null');
+ return {
+  participant_information:contact?{full_name:contact.full_name,email:contact.email,collected_at:contact.collected_at}:null,
+  format_version:'mirage-github-pages-v6',
+  study_title:manifest.config.study_title,
+  participant_id:session.pid,
+  artist:session.artist,
+  created_at:session.created_at,
+  completed_at:session.completed_at,
+  consent:session.consent||null,
+  background:session.background||null,
+  artist_background:session.artist_background||null,
+  post_study:session.post_study||null,
+  study_mode:manifest.config.study_mode,
+  assignments:{pairs:session.pairs,attacks:session.attacks},
+  responses:session.answers
+ };
+}
+
+function getServerPayload(){
+ return {
+  pid:session.pid,
+  ...getResponsePayload()
+ };
+}
+
+function downloadResponses(){
+ const result=getResponsePayload();
+ const blob=new Blob([JSON.stringify(result,null,2)],{type:'application/json'});
+ const url=URL.createObjectURL(blob);
+ const a=document.createElement('a');
+ a.href=url;
+ a.download=`mirage_${session.pid}.json`;
+ document.body.appendChild(a);
+ a.click();
+ a.remove();
+ setTimeout(()=>URL.revokeObjectURL(url),2000);
+}
+
+async function autosaveOnline(){
+ const endpoint=manifest.config.response_endpoint;
+ if(!endpoint)return false;
+ try{
+  const res=await fetch(endpoint,{
+   method:'POST',
+   headers:{'Content-Type':'application/json','Accept':'application/json'},
+   body:JSON.stringify(getServerPayload()),
+   keepalive:true
+  });
+  if(!res.ok)throw Error('HTTP '+res.status);
+  session.last_autosaved_at=new Date().toISOString();
+  delete session.last_autosave_error;
+  save();
+  return true;
+ }catch(e){
+  session.last_autosave_error=String(e&&e.message?e.message:e);
+  save();
+  console.warn('Autosave failed:',e);
+  return false;
+ }
+}
+
 async function submitOnline(){
  const endpoint=manifest.config.response_endpoint;
  const status=$('submissionStatus');
- if(!endpoint){status.textContent='No collection endpoint configured. Please download and return your JSON file to the study administrator.';return}
- status.textContent='Sending responses to the study collector…';
+ if(!endpoint){
+  if(status)status.textContent='No collection endpoint configured. Please download and return your JSON file to the study administrator.';
+  return;
+ }
+ if(status)status.textContent='Sending final responses to the study collector…';
  try{
-  const res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({participant_id:session.pid,study_payload:JSON.stringify(getResponsePayload())})});
+  const res=await fetch(endpoint,{
+   method:'POST',
+   headers:{'Content-Type':'application/json','Accept':'application/json'},
+   body:JSON.stringify(getServerPayload()),
+   keepalive:true
+  });
   if(!res.ok)throw Error('HTTP '+res.status);
-  session.uploaded_at=new Date().toISOString();save();
-  status.textContent='Responses submitted successfully. You may also download a backup.';
- }catch(e){status.textContent='Online submission did not succeed ('+e.message+'). Please download the JSON file and contact the study administrator.'}
+  session.uploaded_at=new Date().toISOString();
+  delete session.last_autosave_error;
+  save();
+  if(status)status.textContent='Responses submitted successfully. You may also download a backup.';
+ }catch(e){
+  if(status)status.textContent='Online submission did not succeed ('+e.message+'). Please download the JSON file and contact the study administrator.';
+ }
 }
 function renderFinish(){
  stage='finish';setHeader('Study completed',100,'Thank you for contributing to this research');
