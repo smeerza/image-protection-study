@@ -25,7 +25,7 @@
   "minimum_familiarization_seconds": 15,
   "study_mode": "demo",
   "caption_question_enabled": true,
-  "response_endpoint": "",
+  "response_endpoint": "https://mirage-response-api.irfanmeerza00185.workers.dev/submit",
   "artist_display_names": {
     "wikiart_albrecht-durer": "Albrecht Dürer",
     "wikiart_alphonse-mucha": "Alphonse Mucha",
