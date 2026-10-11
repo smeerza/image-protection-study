@@ -1,0 +1,36 @@
+{
+  "study_title": "Mirage Art Style Evaluation",
+  "artists": [
+    "wikiart_albrecht-durer",
+    "wikiart_alphonse-mucha",
+    "wikiart_anna-ostroumova-lebedeva",
+    "wikiart_edvard-munch",
+    "wikiart_edward-hopper"
+  ],
+  "methods": [
+    "glaze",
+    "mist",
+    "antidb",
+    "mirage",
+    "metacloak",
+    "styleguard"
+  ],
+  "attacks": [
+    "diffpure",
+    "impress++",
+    "noisy_upscaling"
+  ],
+  "comparison_count_per_method": 2,
+  "reference_count": 6,
+  "minimum_familiarization_seconds": 15,
+  "study_mode": "demo",
+  "caption_question_enabled": true,
+  "response_endpoint": "",
+  "artist_display_names": {
+    "wikiart_albrecht-durer": "Albrecht Dürer",
+    "wikiart_alphonse-mucha": "Alphonse Mucha",
+    "wikiart_anna-ostroumova-lebedeva": "Anna Ostroumova-Lebedeva",
+    "wikiart_edvard-munch": "Edvard Munch",
+    "wikiart_edward-hopper": "Edward Hopper"
+  }
+}
