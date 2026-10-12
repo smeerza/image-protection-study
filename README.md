@@ -1,4 +1,4 @@
-# Mirage Art Style Evaluation — fixed static webpage package
+# Art Style Protection Study — static webpage package
 
 This package contains the webpage code only. **The `data/` folder is intentionally excluded.** Copy your existing `data/` directory into the project root before building the manifest.
 
@@ -107,7 +107,7 @@ At the time this package was prepared, the uploaded dataset had populated Glaze,
 
 Commit these files plus your `data/` folder to the repository root and enable GitHub Pages from the `main` branch. `manifest.js` must be rebuilt whenever the data or config changes.
 
-Responses remain in the participant browser unless `response_endpoint` is configured. Participants can download a JSON response file at completion.
+Responses remain in the participant browser unless `response_endpoint` is configured. Responses are autosaved and submitted to the configured response endpoint. The participant-facing JSON download option has been removed.
 
 
 ## Section 3 questionnaire (v5)
@@ -132,3 +132,8 @@ The final question is the primary direct comparison of style-protection strength
 Section 4 uses a three-column desktop grid rather than the previous four-column grid. Every image panel is square and preserves the native 512×512 aspect ratio, with a maximum displayed size of 512×512. The grid becomes two columns on medium screens and one column on small screens.
 
 The manifest builder validates robustness using only `removed/<attack>/<method>/<prompt>` for all six configured methods; it no longer requires a clean image for the Section 4 grid.
+
+
+## Practice images
+
+Practice questions now load images from `data/practice/` rather than using built-in SVG dummy images. Populate the exact paths listed in `data/practice/README.md` before running the study. Use holdout practice images that do not belong to any of the five evaluation artists and do not appear in the main evaluation.
