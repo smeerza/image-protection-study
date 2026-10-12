@@ -30,8 +30,8 @@ const TRAIN=[
  {kind:'Image noise',desc:'Select the image with less random visual noise.',a:'./data/practice/noise/A.png',b:'./data/practice/noise/B.png',right:'B',why:'Image A contains more visible random noise.'},
  {kind:'Visual artifacts',desc:'Find the image with fewer unintended distortions or visual artifacts.',a:'./data/practice/artifacts/A.png',b:'./data/practice/artifacts/B.png',right:'B',why:'Image A contains more visible artifacts and distortions.'},
  {kind:'Image detail',desc:'Select the image with clearer and sharper visual details.',a:'./data/practice/detail/A.png',b:'./data/practice/detail/B.png',right:'A',why:'Image A preserves clearer fine details.'},
- {kind:'Generation prompt matching',desc:'Generation prompt: “A snowy mountain.” Choose the image that better follows the prompt.',a:'./data/practice/prompt/A.png',b:'./data/practice/prompt/B.png',right:'B',why:'Image B better matches the generation prompt.'},
- {kind:'AI-generated caption matching',desc:'AI-generated caption: “A red apple on a wooden table.” Choose the image that better matches the caption.',a:'./data/practice/caption/A.png',b:'./data/practice/caption/B.png',right:'A',why:'Image A better matches the caption.'}
+ {kind:'Generation prompt matching',desc:'Generation prompt: “A painting of a house in jungle.” Choose the image that better follows the prompt.',a:'./data/practice/prompt/A.png',b:'./data/practice/prompt/B.png',right:'B',why:'Image B better matches the generation prompt.'},
+ {kind:'AI-generated caption matching',desc:'AI-generated caption: “Children running toward school.” Choose the image that better matches the caption.',a:'./data/practice/caption/A.png',b:'./data/practice/caption/B.png',right:'A',why:'Image A better matches the caption.'}
 ];
 function hashSeed(){return crypto.randomUUID().replaceAll('-','')}
 function shuffle(items){const out=[...items];for(let i=out.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[out[i],out[j]]=[out[j],out[i]]}return out}
