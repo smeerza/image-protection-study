@@ -135,3 +135,18 @@ Commit the project files plus your data and generated `manifest.js`. In GitHub:
 ## Important blinding behavior
 
 Participants never see protection-method names or robustness/removal-method names. Internally, the saved response JSON still records the true method and condition so the results can be analyzed later.
+
+
+## Participant demographics restored
+
+After consent + Turnstile verification and before artist familiarization, the site now collects:
+- Optional name
+- Optional profile image (compressed client-side)
+- Art background
+- Familiarity with visual-art evaluation
+- Familiarity with generative AI
+- Frequency of generative-AI use
+- Familiarity with AI style mimicry
+- Conditional artist-experience questions for art students/freelance/professional artists
+
+The final attitudes questionnaire remains removed. These fields are included in the normal response payload sent to the configured Cloudflare endpoint.

@@ -5,6 +5,7 @@ if (!manifest) throw new Error('manifest.js failed to load');
 
 const METHODS = manifest.config.methods || ['glaze','mist','antidb','mirage','metacloak','styleguard'];
 const ATTACKS = manifest.config.attacks || ['diffpure','impress++','noisy_upscaling'];
+const ARTIST_BACKGROUNDS = new Set(['Art student','Part-time/freelance artist','Full-time/professional artist']);
 const $ = id => document.getElementById(id);
 const content = $('content');
 const nextButton = $('nextButton');
@@ -42,7 +43,7 @@ const PRACTICE = [
 
 function hashSeed(){ return crypto.randomUUID().replaceAll('-',''); }
 function shuffle(items){ const out=[...items]; for(let i=out.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[out[i],out[j]]=[out[j],out[i]];} return out; }
-function assignmentKey(){ return 'art_style_protection_session_v8'; }
+function assignmentKey(){ return 'art_style_protection_session_v9'; }
 function save(){ localStorage.setItem(assignmentKey(), JSON.stringify(session)); }
 function img(artist,key){ return manifest.artists?.[artist]?.images?.[key] || null; }
 function letters(n){ return 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.slice(0,n).split(''); }
@@ -121,12 +122,12 @@ function makeAssignment(){
     if(robustProblem || robustness.length!==conditions.length) continue;
 
     return {
-      pid:'p_'+hashSeed(), created_at:new Date().toISOString(), version:'github-pages-v8',
+      pid:'p_'+hashSeed(), created_at:new Date().toISOString(), version:'github-pages-v9',
       artist:name, artist_display:a.display_name,
       references:shuffle(a.references).slice(0,Number(manifest.config.reference_count||6)),
       quality, effectiveness, robustness:shuffle(robustness),
       progress:{stage:'consent',practice:0,quality:0,effectiveness:0,robustness:0},
-      consent:null, verified:false, answers:[], completed_at:null
+      consent:null, verified:false, participant_profile:null, background:null, artist_background:null, answers:[], completed_at:null
     };
   }
   throw new Error(problems.join('; ') || 'No suitable artists configured.');
@@ -154,7 +155,7 @@ function setHeader(label,pct,foot='Art Style Protection Study'){
   $('loadFill').style.width=Math.max(0,Math.min(100,pct))+'%';
   $('loadFill').parentElement.setAttribute('aria-valuenow',Math.round(pct));
   $('footerText').textContent=foot;
-  const names={consent:'Consent',verify:'Human verification',intro:'Familiarization',practice:'Practice',quality:'Artwork quality',effectiveness:'Protection effectiveness',robustness:'Robustness evaluation',finish:'Completed',declined:'Study closed'};
+  const names={consent:'Consent',verify:'Human verification',profile:'Participant profile',background:'Background',artist_followup:'Artist experience',intro:'Familiarization',practice:'Practice',quality:'Artwork quality',effectiveness:'Protection effectiveness',robustness:'Robustness evaluation',finish:'Completed',declined:'Study closed'};
   $('stageCount').textContent=names[stage]||'Study';
   document.querySelector('footer.bottom').hidden=false;
 }
@@ -174,7 +175,7 @@ function existing(section,id){ return session.answers.find(x=>x.section===sectio
 
 function renderConsent(){
   stage='consent';session.progress.stage=stage;save();setHeader('Consent to participate',2);setBackButton(false);setButton(false);
-  content.innerHTML=`<section class="consent-simple"><p class="kicker">Research participation</p><h1>Art Style Protection Study</h1><p class="sub">You are invited to take part in a research study about how people perceive original, protected, and AI-generated artwork.</p><div class="consent-box"><h2>What you will do</h2><p>You will view artworks and AI-generated images, compare their visual quality and artistic style, and answer short visual-evaluation questions. The study is designed for desktop or laptop use.</p><h2>Time and risks</h2><p>The study is expected to take approximately 15–25 minutes. Risks are minimal and similar to ordinary computer use.</p><h2>Privacy</h2><p>Your responses are linked to a randomly generated participant ID and submitted to the study's research collection service. Results may be reported in aggregate.</p><h2>Voluntary participation</h2><p>Participation is voluntary. You may stop at any time before completing the study.</p><div class="consent-actions"><button id="consentYes">I consent and wish to continue</button><button id="consentNo" class="quiet-button">I do not consent</button></div></div></section>`;
+  content.innerHTML=`<section class="consent-simple"><p class="kicker">Research participation</p><h1>Art Style Protection Study</h1><p class="sub">You are invited to take part in a research study about how people perceive original, protected, and AI-generated artwork.</p><div class="consent-box"><h2>What you will do</h2><p>You will view artworks and AI-generated images, compare their visual quality and artistic style, and answer short visual-evaluation questions. The study is designed for desktop or laptop use.</p><h2>Time and risks</h2><p>The study is expected to take approximately 15–25 minutes. Risks are minimal and similar to ordinary computer use.</p><h2>Privacy</h2><p>Your responses are linked to a randomly generated participant ID and submitted to the study's research collection service. You may optionally provide a name and profile image; these are not required to participate. Background questions about art and generative AI are collected to help interpret the study results. Results may be reported in aggregate.</p><h2>Voluntary participation</h2><p>Participation is voluntary. You may stop at any time before completing the study.</p><div class="consent-actions"><button id="consentYes">I consent and wish to continue</button><button id="consentNo" class="quiet-button">I do not consent</button></div></div></section>`;
   $('consentYes').onclick=()=>{session.consent={consented:true,at:new Date().toISOString()};session.progress.stage='verify';save();renderVerify();goTop();};
   $('consentNo').onclick=()=>{session.consent={consented:false,at:new Date().toISOString()};session.progress.stage='declined';save();renderDeclined();};
 }
@@ -195,11 +196,50 @@ function renderVerify(){
         if(data.success===false) throw new Error('Verification rejected');
       }catch(e){ $('verifyStatus').textContent='Verification could not be confirmed. Please try again.'; setButton(false); return; }
     }
-    session.verified=true;session.verified_at=new Date().toISOString();save();setButton(true,()=>{renderIntro();goTop();});
+    session.verified=true;session.verified_at=new Date().toISOString();save();setButton(true,()=>{renderProfile();goTop();});
   };
   window.mirageTurnstileExpired=()=>{session.verified=false;save();$('verifyStatus').textContent='Verification expired. Please complete it again.';setButton(false);};
   // In case Turnstile loaded before this screen was rendered, explicitly render it.
   setTimeout(()=>{if(window.turnstile && $('turnstileMount') && !$('turnstileMount').querySelector('iframe')){try{turnstile.render('#turnstileMount',{sitekey:siteKey,callback:window.mirageTurnstilePassed,'expired-callback':window.mirageTurnstileExpired});}catch(_){}}},250);
+}
+
+
+async function compressProfileImage(file){
+  if(!file) return null;
+  if(!file.type.startsWith('image/')) throw new Error('Please choose an image file.');
+  if(file.size > 10*1024*1024) throw new Error('Please choose an image smaller than 10 MB.');
+  const dataUrl = await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(new Error('Could not read image.'));reader.readAsDataURL(file);});
+  const image = await new Promise((resolve,reject)=>{const im=new Image();im.onload=()=>resolve(im);im.onerror=()=>reject(new Error('Could not process image.'));im.src=dataUrl;});
+  const maxSide=420, scale=Math.min(1,maxSide/Math.max(image.naturalWidth,image.naturalHeight));
+  const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(image.naturalWidth*scale));canvas.height=Math.max(1,Math.round(image.naturalHeight*scale));
+  canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);
+  return canvas.toDataURL('image/jpeg',0.78);
+}
+function renderProfile(){
+  stage='profile';session.progress.stage=stage;save();setHeader('Participant profile',7);setBackButton(true,()=>{renderVerify();goTop();});
+  const p=session.participant_profile||{};
+  content.innerHTML=`<div class="background-layout"><div class="background-heading"><span class="background-kicker">PARTICIPANT INFORMATION</span><h1>A little about you</h1><p class="sub">The fields on this page are optional. You may leave them blank and continue.</p></div><form id="profileForm" class="background-card profile-card" novalidate><div class="profile-grid"><div class="profile-photo-block"><div id="profilePreview" class="profile-preview">${p.profile_image_data_url?`<img src="${p.profile_image_data_url}" alt="Profile preview">`:'<span>Optional image</span>'}</div><label class="profile-upload" for="profileImage">Choose image <span>(optional)</span></label><input id="profileImage" type="file" accept="image/*"><p class="tiny">If provided, the image is compressed in your browser before submission.</p></div><div class="participant-fields"><div class="participant-field"><label for="participantName">Name <span class="optional-label">(optional)</span></label><input id="participantName" type="text" maxlength="150" autocomplete="name" placeholder="Your name" value="${safe(p.name||'')}"></div><div class="profile-note"><strong>Why ask this?</strong><p>Optional profile information can help researchers distinguish voluntary participant records during study administration. It is not used to score your answers.</p></div></div></div><p id="profileError" class="background-error" role="alert" aria-live="polite"></p></form></div>`;
+  const fileInput=$('profileImage'), preview=$('profilePreview'), err=$('profileError');let photo=p.profile_image_data_url||null;
+  fileInput.onchange=async()=>{err.textContent='';const f=fileInput.files?.[0];if(!f){photo=null;preview.innerHTML='<span>Optional image</span>';return;}try{photo=await compressProfileImage(f);preview.innerHTML=`<img src="${photo}" alt="Profile preview">`;}catch(e){photo=null;fileInput.value='';preview.innerHTML='<span>Optional image</span>';err.textContent=e.message||'Could not process image.';}};
+  setButton(true,()=>{session.participant_profile={name:$('participantName').value.trim()||null,profile_image_data_url:photo,collected_at:new Date().toISOString()};session.progress.stage='background';save();renderBackground();goTop();});
+}
+function renderBackground(){
+  stage='background';session.progress.stage=stage;save();setHeader('Participant background',9);setBackButton(true,()=>{renderProfile();goTop();});
+  const prev=session.background||{};const artOptions=['No experience','Casual/hobby experience','Art student','Part-time/freelance artist','Full-time/professional artist','Other'];const familiarityOptions=['Not at all familiar','Slightly familiar','Moderately familiar','Very familiar','Extremely familiar'];const frequencyOptions=['Never','Once or twice','Occasionally','Frequently','Very frequently'];
+  const radioList=(name,items,selectedValue)=>items.map(v=>`<label class="background-option"><input type="radio" name="${name}" value="${safe(v)}" ${selectedValue===v?'checked':''}><span>${safe(v)}</span></label>`).join('');
+  content.innerHTML=`<div class="background-layout"><div class="background-heading"><span class="background-kicker">PARTICIPANT BACKGROUND</span><h1>Your experience with art and generative AI</h1><p class="sub">Please answer five short questions. These responses help us understand the background of the people making the visual judgments.</p></div><form id="backgroundForm" class="background-card" novalidate><fieldset class="background-question"><legend><span class="background-number">01</span>Art background</legend><p>Which best describes your experience with creating visual art?</p><div class="background-options">${radioList('art_background',artOptions,prev.art_background)}</div><div id="otherArtWrap" class="background-other" ${prev.art_background==='Other'?'':'hidden'}><label for="otherArt">Please specify</label><input id="otherArt" type="text" maxlength="200" value="${safe(prev.art_background_other||'')}" placeholder="Describe your experience"></div></fieldset><fieldset class="background-question"><legend><span class="background-number">02</span>Familiarity with visual art</legend><p>How familiar are you with evaluating differences in visual-art style, composition, color, texture, and technique?</p><div class="background-options background-scale">${radioList('art_familiarity',familiarityOptions,prev.art_familiarity_label)}</div></fieldset><fieldset class="background-question"><legend><span class="background-number">03</span>Familiarity with generative AI</legend><p>How familiar are you with AI image-generation tools such as Stable Diffusion, Midjourney, or DALL·E?</p><div class="background-options background-scale">${radioList('ai_familiarity',familiarityOptions,prev.ai_familiarity_label)}</div></fieldset><fieldset class="background-question"><legend><span class="background-number">04</span>Experience using generative AI</legend><p>How often have you used AI image-generation tools?</p><div class="background-options">${radioList('ai_usage',frequencyOptions,prev.ai_usage)}</div></fieldset><fieldset class="background-question"><legend><span class="background-number">05</span>Familiarity with AI style mimicry</legend><p>Before this study, how familiar were you with using generative AI to imitate or reproduce an artist's visual style?</p><div class="background-options background-scale">${radioList('style_mimicry_familiarity',familiarityOptions,prev.style_mimicry_familiarity_label)}</div></fieldset><p id="backgroundError" class="background-error" role="alert" aria-live="polite"></p></form></div>`;
+  const form=$('backgroundForm'),selected=name=>form.querySelector(`input[name="${name}"]:checked`)?.value||null;const valid=()=>Boolean(selected('art_background')&&selected('art_familiarity')&&selected('ai_familiarity')&&selected('ai_usage')&&selected('style_mimicry_familiarity')&&(selected('art_background')!=='Other'||$('otherArt').value.trim()));
+  const submit=()=>{if(!valid()){$('backgroundError').textContent='Please answer all five questions.';return;}session.background={art_background:selected('art_background'),art_background_other:selected('art_background')==='Other'?$('otherArt').value.trim():null,art_familiarity:familiarityOptions.indexOf(selected('art_familiarity'))+1,art_familiarity_label:selected('art_familiarity'),ai_familiarity:familiarityOptions.indexOf(selected('ai_familiarity'))+1,ai_familiarity_label:selected('ai_familiarity'),ai_usage:selected('ai_usage'),style_mimicry_familiarity:familiarityOptions.indexOf(selected('style_mimicry_familiarity'))+1,style_mimicry_familiarity_label:selected('style_mimicry_familiarity'),submitted_at:new Date().toISOString()};save();if(ARTIST_BACKGROUNDS.has(session.background.art_background))renderArtistFollowup();else renderIntro();goTop();};
+  const update=()=>{$('otherArtWrap').hidden=selected('art_background')!=='Other';$('backgroundError').textContent='';setButton(valid(),submit);};form.querySelectorAll('input[type="radio"]').forEach(el=>el.onchange=update);$('otherArt').oninput=update;update();
+}
+function renderArtistFollowup(){
+  stage='artist_followup';session.progress.stage=stage;save();setHeader('Artist experience',10);setBackButton(true,()=>{renderBackground();goTop();});
+  const prev=session.artist_background||{};const years=['Less than 1 year','1–5 years','6–10 years','More than 10 years'];const media=['Digital illustration','Painting','Drawing','Photography','Graphic design','3D art','Mixed media','Other'];const sharing=['Never','Rarely','Sometimes','Often','Very often'];const importance=['Not important at all','Slightly important','Moderately important','Very important','Extremely important'];const awareness=['Yes','No','Unsure','Prefer not to say'];
+  const radios=(name,vals,selected)=>vals.map(v=>`<label class="background-option"><input type="radio" name="${name}" value="${safe(v)}" ${selected===v?'checked':''}><span>${safe(v)}</span></label>`).join('');const checks=media.map(v=>`<label class="background-option"><input type="checkbox" name="art_medium" value="${safe(v)}" ${(prev.primary_artistic_media||[]).includes(v)?'checked':''}><span>${safe(v)}</span></label>`).join('');
+  content.innerHTML=`<div class="background-layout"><div class="background-heading"><span class="background-kicker">ARTIST EXPERIENCE</span><h1>Your artistic practice</h1><p class="sub">Because you indicated an art background, please answer a few additional questions about your experience.</p></div><form id="artistForm" class="background-card" novalidate><fieldset class="background-question"><legend><span class="background-number">01</span>Years of artistic experience</legend><p>How many years have you been creating visual artwork?</p><div class="background-options">${radios('artist_years',years,prev.years_of_experience)}</div></fieldset><fieldset class="background-question"><legend><span class="background-number">02</span>Primary artistic medium</legend><p>What type(s) of visual art do you primarily create? <span class="tiny">Select all that apply.</span></p><div class="background-options">${checks}</div><div id="artistOtherWrap" class="background-other" ${(prev.primary_artistic_media||[]).includes('Other')?'':'hidden'}><label for="artistOther">Please specify</label><input id="artistOther" type="text" maxlength="200" value="${safe(prev.primary_artistic_medium_other||'')}" placeholder="Describe your medium"></div></fieldset><fieldset class="background-question"><legend><span class="background-number">03</span>Online sharing of artwork</legend><p>How often do you share or publish your artwork online?</p><div class="background-options">${radios('artist_sharing',sharing,prev.online_sharing_frequency)}</div></fieldset><fieldset class="background-question"><legend><span class="background-number">04</span>Importance of online publication</legend><p>How important is sharing your artwork online to your artistic practice or career?</p><div class="background-options background-scale">${radios('artist_importance',importance,prev.online_publication_importance_label)}</div></fieldset><fieldset class="background-question"><legend><span class="background-number">05</span>Personal experience with AI style mimicry</legend><p>Are you aware of your artwork or artistic style having been used or imitated by generative AI?</p><div class="background-options">${radios('artist_mimicry',awareness,prev.ai_style_mimicry_awareness)}</div></fieldset><p id="artistError" class="background-error" role="alert" aria-live="polite"></p></form></div>`;
+  const form=$('artistForm'),selected=name=>form.querySelector(`input[name="${name}"]:checked`)?.value||null,selectedMedia=()=>[...form.querySelectorAll('input[name="art_medium"]:checked')].map(el=>el.value);const valid=()=>Boolean(selected('artist_years')&&selectedMedia().length&&(!selectedMedia().includes('Other')||$('artistOther').value.trim())&&selected('artist_sharing')&&selected('artist_importance')&&selected('artist_mimicry'));
+  const submit=()=>{if(!valid()){$('artistError').textContent='Please answer all five questions.';return;}session.artist_background={years_of_experience:selected('artist_years'),primary_artistic_media:selectedMedia(),primary_artistic_medium_other:selectedMedia().includes('Other')?$('artistOther').value.trim():null,online_sharing_frequency:selected('artist_sharing'),online_publication_importance:importance.indexOf(selected('artist_importance'))+1,online_publication_importance_label:selected('artist_importance'),ai_style_mimicry_awareness:selected('artist_mimicry'),submitted_at:new Date().toISOString()};save();renderIntro();goTop();};
+  const update=()=>{$('artistOtherWrap').hidden=!selectedMedia().includes('Other');$('artistError').textContent='';setButton(valid(),submit);};form.querySelectorAll('input').forEach(el=>el.addEventListener(el.type==='text'?'input':'change',update));update();
 }
 
 function renderIntro(){
@@ -266,17 +306,17 @@ function renderRobustness(){
 }
 
 function getResponsePayload(){
-  return {format_version:'art-style-protection-github-pages-v8',study_title:manifest.config.study_title,participant_id:session.pid,artist:session.artist,created_at:session.created_at,completed_at:session.completed_at,consent:session.consent,verified_at:session.verified_at||null,study_mode:manifest.config.study_mode,assignments:{quality:session.quality,effectiveness:session.effectiveness,robustness:session.robustness},responses:session.answers};
+  return {format_version:'art-style-protection-github-pages-v9',study_title:manifest.config.study_title,participant_id:session.pid,artist:session.artist,created_at:session.created_at,completed_at:session.completed_at,consent:session.consent,verified_at:session.verified_at||null,participant_profile:session.participant_profile||null,background:session.background||null,artist_background:session.artist_background||null,study_mode:manifest.config.study_mode,assignments:{quality:session.quality,effectiveness:session.effectiveness,robustness:session.robustness},responses:session.answers};
 }
 async function autosaveOnline(){
   const endpoint=manifest.config.response_endpoint;if(!endpoint)return false;
-  try{const res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({pid:session.pid,...getResponsePayload()}),keepalive:true});if(!res.ok)throw new Error('HTTP '+res.status);session.last_autosaved_at=new Date().toISOString();delete session.last_autosave_error;save();return true;}catch(e){session.last_autosave_error=String(e?.message||e);save();console.warn('Autosave failed:',e);return false;}
+  try{const res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({pid:session.pid,...getResponsePayload()})});if(!res.ok)throw new Error('HTTP '+res.status);session.last_autosaved_at=new Date().toISOString();delete session.last_autosave_error;save();return true;}catch(e){session.last_autosave_error=String(e?.message||e);save();console.warn('Autosave failed:',e);return false;}
 }
 async function submitOnline(){
   const endpoint=manifest.config.response_endpoint;
   if(!endpoint){session.last_autosave_error='No response endpoint configured';save();return false;}
   try{
-    const res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({pid:session.pid,...getResponsePayload()}),keepalive:true});
+    const res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({pid:session.pid,...getResponsePayload()})});
     const responseText=await res.text().catch(()=> '');
     if(!res.ok)throw new Error(`HTTP ${res.status}${responseText?`: ${responseText.slice(0,240)}`:''}`);
     session.uploaded_at=new Date().toISOString();delete session.last_autosave_error;save();return true;
@@ -296,12 +336,18 @@ function start(){
   const s=session.progress.stage;
   if(s==='declined')return renderDeclined();
   if(!session.consent?.consented)return renderConsent();
-  if(!session.verified && s!=='intro' && s!=='practice' && s!=='quality' && s!=='effectiveness' && s!=='robustness' && s!=='finish')return renderVerify();
+  if(!session.verified)return renderVerify();
+  if(s==='profile')return renderProfile();
+  if(s==='background')return renderBackground();
+  if(s==='artist_followup')return renderArtistFollowup();
   if(s==='finish')return renderFinish();
   if(s==='practice')return renderPractice();
   if(s==='quality')return renderQuality();
   if(s==='effectiveness')return renderEffectiveness();
   if(s==='robustness')return renderRobustness();
+  if(!session.participant_profile)return renderProfile();
+  if(!session.background)return renderBackground();
+  if(ARTIST_BACKGROUNDS.has(session.background.art_background) && !session.artist_background)return renderArtistFollowup();
   renderIntro();
 }
 start();
