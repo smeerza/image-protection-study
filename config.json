@@ -20,12 +20,14 @@
     "impress++",
     "noisy_upscaling"
   ],
-  "comparison_count_per_method": 2,
   "reference_count": 6,
   "minimum_familiarization_seconds": 15,
-  "study_mode": "demo",
-  "caption_question_enabled": true,
+  "protected_artwork_trials": 2,
+  "effectiveness_prompt_count": 4,
+  "study_mode": "production",
   "response_endpoint": "https://mirage-response-api.irfanmeerza00185.workers.dev/submit",
+  "turnstile_site_key": "1x00000000000000000000AA",
+  "turnstile_verify_endpoint": "",
   "artist_display_names": {
     "wikiart_albrecht-durer": "Albrecht Dürer",
     "wikiart_alphonse-mucha": "Alphonse Mucha",

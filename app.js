@@ -1,347 +1,307 @@
-const POST_STUDY_QUESTIONS=[["training_without_consent", "AI training without consent", "I am concerned that artists’ original artwork could be used to train generative AI models without their knowledge or consent."], ["unauthorized_style_imitation", "Unauthorized style imitation", "I am concerned that generative AI could replicate or imitate an artist’s distinctive style without their permission."], ["commercial_compensation", "Commercial use and compensation", "Artists should receive appropriate compensation when their artwork or distinctive artistic style is commercially used to develop or produce generative AI content."], ["attribution", "Attribution and recognition", "Artists should receive appropriate attribution when AI-generated content closely imitates their distinctive artistic style"], ["artist_control", "Artist control", "Artists should have control over whether their artwork is used to train generative AI models."], ["copying_vs_inspiration", "Copying vs. inspiration", "When generative AI closely imitates an artist’s distinctive style, I consider it more like copying the artist’s work than taking inspiration from it."], ["livelihoods", "Impact on artists’ livelihoods", "Over the next 5–10 years, generative AI will substantially disrupt traditional careers in visual art and illustration."], ["creative_diversity", "Impact on creative diversity", "Widespread use of generative AI could reduce diversity in the visual-art ecosystem by encouraging similar or highly reproducible styles."], ["safeguards", "Need for safeguards", "Ethical or technical safeguards are needed to protect artists from unauthorized use of their work by generative AI systems."], ["visual_changes", "Acceptance of protection-related visual changes", "Small visual changes to an artwork are acceptable if they help prevent unauthorized AI-based imitation of the artist’s style."]];
 'use strict';
+
 const manifest = window.MIRAGE_MANIFEST;
 if (!manifest) throw new Error('manifest.js failed to load');
-const ARTIST_BACKGROUNDS=['Art student','Part-time/freelance artist','Full-time/professional artist'];
-const PAIR_QUESTIONS=[
- ['style','Ignoring overall image quality, which image more closely matches the reference artist’s style?'],
- ['prompt','Which image better matches the generation prompt?'],
- ['quality','Which image has better overall visual quality?'],
- ['artifacts','Which image contains more visible artifacts or distortions?']
+
+const METHODS = manifest.config.methods || ['glaze','mist','antidb','mirage','metacloak','styleguard'];
+const ATTACKS = manifest.config.attacks || ['diffpure','impress++','noisy_upscaling'];
+const $ = id => document.getElementById(id);
+const content = $('content');
+const nextButton = $('nextButton');
+const backButton = $('backButton');
+const safe = s => String(s ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
+
+const PRACTICE = [
+  {
+    kind:'Visual quality',
+    instruction:'Choose the image with better overall visual quality.',
+    a:'./data/practice/quality/A.png', b:'./data/practice/quality/B.png', right:'A',
+    why:'Image A is clearer and has fewer visible degradations.'
+  },
+  {
+    kind:'Artistic style similarity',
+    instruction:'Using the reference artworks, choose the image that more closely matches the artistic style. Focus on color, texture, brushwork, shapes, and composition.',
+    a:'./data/practice/style/A.png', b:'./data/practice/style/B.png',
+    references:['./data/practice/style/references/01.png','./data/practice/style/references/02.png','./data/practice/style/references/03.png'],
+    right:'B', why:'Image B more closely follows the visual characteristics shown in the reference artworks.'
+  },
+  {
+    kind:'Generation prompt matching',
+    instruction:'Generation prompt: “A painting of a house in jungle.” Choose the image that better follows the prompt.',
+    a:'./data/practice/prompt/A.png', b:'./data/practice/prompt/B.png', right:'B',
+    why:'Image B better matches the generation prompt.'
+  },
+  {
+    kind:'Robustness judgment',
+    instruction:'Using the reference artworks, choose the image that LEAST resembles the artistic style.',
+    a:'./data/practice/style/A.png', b:'./data/practice/style/B.png',
+    references:['./data/practice/style/references/01.png','./data/practice/style/references/02.png','./data/practice/style/references/03.png'],
+    right:'A', why:'Image A carries fewer of the visual characteristics shown in the reference artworks.'
+  }
 ];
-const ATTACK_BASE_QUESTIONS=[
- ['noise','Which image contains the most visible noise?'],
- ['artifacts','Which image contains the most visible artifacts or distortions?'],
- ['details','Which image has the least clear visual details?'],
- ['prompt','Which image matches the generation prompt the least?'],
- ['quality','Which image has the lowest overall visual quality?'],
- ['style','Ignoring overall image quality, which image least resembles the reference artist’s style?']
-];
-const CAPTION_QUESTION=['caption','Which image best matches the AI-generated caption?'];
-function trialQuestions(trial,isAttack=false){
- if(!isAttack)return PAIR_QUESTIONS;
- return ATTACK_BASE_QUESTIONS;
+
+function hashSeed(){ return crypto.randomUUID().replaceAll('-',''); }
+function shuffle(items){ const out=[...items]; for(let i=out.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[out[i],out[j]]=[out[j],out[i]];} return out; }
+function assignmentKey(){ return 'art_style_protection_session_v8'; }
+function save(){ localStorage.setItem(assignmentKey(), JSON.stringify(session)); }
+function img(artist,key){ return manifest.artists?.[artist]?.images?.[key] || null; }
+function letters(n){ return 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.slice(0,n).split(''); }
+
+function qualityOriginal(artist,id){
+  return img(artist,'artwork_quality/original/'+id) || img(artist,'references/'+id);
 }
-const $=id=>document.getElementById(id), content=$('content'), button=$('nextButton'), backButton=$('backButton');
-const safe=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
-const TRAIN=[
- {kind:'Overall image quality',desc:'Focus on the image that looks clearer and more coherent.',a:'./data/practice/quality/A.png',b:'./data/practice/quality/B.png',right:'A',why:'Image A is clearer and has fewer visible degradations.'},
- {kind:'Artistic style similarity',desc:'Compare the two images with the reference artworks. Focus on color, brushwork, texture, shapes and composition; ignore overall image quality.',a:'./data/practice/style/A.png',b:'./data/practice/style/B.png',references:['./data/practice/style/references/01.png','./data/practice/style/references/02.png','./data/practice/style/references/03.png'],right:'B',why:'Image B more closely follows the visual characteristics shown in the reference artworks.'},
- {kind:'Image noise',desc:'Select the image with less random visual noise.',a:'./data/practice/noise/A.png',b:'./data/practice/noise/B.png',right:'B',why:'Image A contains more visible random noise.'},
- {kind:'Visual artifacts',desc:'Find the image with fewer unintended distortions or visual artifacts.',a:'./data/practice/artifacts/A.png',b:'./data/practice/artifacts/B.png',right:'B',why:'Image A contains more visible artifacts and distortions.'},
- {kind:'Image detail',desc:'Select the image with clearer and sharper visual details.',a:'./data/practice/detail/A.png',b:'./data/practice/detail/B.png',right:'A',why:'Image A preserves clearer fine details.'},
- {kind:'Generation prompt matching',desc:'Generation prompt: “A painting of a house in jungle.” Choose the image that better follows the prompt.',a:'./data/practice/prompt/A.png',b:'./data/practice/prompt/B.png',right:'B',why:'Image B better matches the generation prompt.'},
- {kind:'AI-generated caption matching',desc:'AI-generated caption: “Children running toward school.” Choose the image that better matches the caption.',a:'./data/practice/caption/A.png',b:'./data/practice/caption/B.png',right:'A',why:'Image A better matches the caption.'}
-];
-function hashSeed(){return crypto.randomUUID().replaceAll('-','')}
-function shuffle(items){const out=[...items];for(let i=out.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[out[i],out[j]]=[out[j],out[i]]}return out}
-function assignmentKey(){return 'art_style_protection_session_v7'}
-function save(){localStorage.setItem(assignmentKey(),JSON.stringify(session))}
-function img(artist,key){return manifest.artists[artist].images[key]}
+function qualityProtected(artist,method,id){
+  return img(artist,'artwork_quality/protected/'+method+'/'+id);
+}
+
 function makeAssignment(){
-  const names=shuffle(Object.keys(manifest.artists).filter(n=>manifest.config.artists.includes(n)));
+  const names = shuffle(Object.keys(manifest.artists || {}).filter(n => (manifest.config.artists || []).includes(n)));
   const problems=[];
   for(const name of names){
     const a=manifest.artists[name];
-    const methods=manifest.config.methods;
-    const pairCount=Number(manifest.config.comparison_count_per_method||2);
-    const pairs=[];
-    let pairId=1;
-    let pairProblem=false;
-
-    // Build pairwise trials independently for each method. Prompts may be
-    // reused across different methods; only the two prompts for a single
-    // method must be distinct.
-    for(const method of shuffle(methods)){
-      const eligible=shuffle(a.prompts.filter(p=>img(name,'clean/'+p.id)&&img(name,'protected/'+method+'/'+p.id)));
-      if(eligible.length<pairCount){
-        problems.push(name+' has only '+eligible.length+' usable prompts for '+method+'; requires '+pairCount);
-        pairProblem=true;
-        break;
-      }
-      for(const p of eligible.slice(0,pairCount)){
-        const choices=shuffle([
-          {method:'clean',url:img(name,'clean/'+p.id)},
-          {method,url:img(name,'protected/'+method+'/'+p.id)}
-        ]).map((c,j)=>({...c,label:'AB'[j]}));
-        pairs.push({id:'pair_'+pairId++,prompt_id:p.id,prompt:p.text,caption:p.caption||'',method,choices});
-      }
+    if(!a || (a.references||[]).length < Number(manifest.config.reference_count||6)){
+      problems.push(name+' does not have enough reference artworks');
+      continue;
     }
-    if(pairProblem)continue;
 
-    // Robustness: show only the six protected methods after each removal attack.
-    // No clean baseline is included in Section 4.
-    const attacks=[];
-    for(const attack of manifest.config.attacks){
-      const eligible=shuffle(a.prompts.filter(p=>
-        methods.every(m=>img(name,'removed/'+attack+'/'+m+'/'+p.id))
-      ));
-      if(!eligible.length){
-        problems.push(name+' is missing a complete robustness set for '+attack);
-        continue;
-      }
-      const p=eligible[0];
-      const rawChoices=methods.map(method=>({
-        method,
-        url:img(name,'removed/'+attack+'/'+method+'/'+p.id)
+    // Protected-artwork quality trials. The original can come from
+    // artwork_quality/original/pXX or, if omitted, references/pXX.
+    const qualityIds = [];
+    for(const key of Object.keys(a.images||{})){
+      const m=key.match(/^artwork_quality\/protected\/[^/]+\/(p\d+)$/i);
+      if(m && !qualityIds.includes(m[1].toLowerCase())) qualityIds.push(m[1].toLowerCase());
+    }
+    const qualityEligible = shuffle(qualityIds.filter(id =>
+      qualityOriginal(name,id) && METHODS.every(m => qualityProtected(name,m,id))
+    ));
+    const qualityCount = Number(manifest.config.protected_artwork_trials||2);
+    if(qualityEligible.length < qualityCount){
+      problems.push(name+' needs '+qualityCount+' complete artwork_quality sets');
+      continue;
+    }
+    const quality = qualityEligible.slice(0,qualityCount).map((id,k)=>{
+      const raw=METHODS.map(method=>({method,url:qualityProtected(name,method,id)}));
+      const choices=shuffle(raw).map((c,i)=>({...c,label:letters(raw.length)[i]}));
+      return {id:'quality_'+(k+1),artwork_id:id,original:qualityOriginal(name,id),choices};
+    });
+
+    // Protection effectiveness: clean + six protection methods, same prompt.
+    const effEligible = shuffle((a.prompts||[]).filter(p =>
+      img(name,'clean/'+p.id) && METHODS.every(m => img(name,'protected/'+m+'/'+p.id))
+    ));
+    const effCount = Number(manifest.config.effectiveness_prompt_count||4);
+    if(effEligible.length < effCount){
+      problems.push(name+' has only '+effEligible.length+' complete protection-effectiveness prompts; needs '+effCount);
+      continue;
+    }
+    const effectiveness = effEligible.slice(0,effCount).map((p,k)=>{
+      const raw=[{method:'clean',url:img(name,'clean/'+p.id)},...METHODS.map(method=>({method,url:img(name,'protected/'+method+'/'+p.id)}))];
+      const choices=shuffle(raw).map((c,i)=>({...c,label:letters(raw.length)[i]}));
+      return {id:'effectiveness_'+(k+1),prompt_id:p.id,prompt:p.text,choices};
+    });
+
+    // Robustness: one no-removal baseline + the three configured attacks.
+    // Every page shows only the six protected-method outputs. Attack identity is hidden in the UI.
+    const conditions=['no_attack',...ATTACKS];
+    const usedPromptIds=new Set();
+    const robustness=[];
+    let robustProblem=false;
+    for(const condition of shuffle(conditions)){
+      const eligible=shuffle((a.prompts||[]).filter(p=>{
+        if(condition==='no_attack') return METHODS.every(m=>img(name,'protected/'+m+'/'+p.id));
+        return METHODS.every(m=>img(name,'removed/'+condition+'/'+m+'/'+p.id));
       }));
-      const letters='ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-      const choices=shuffle(rawChoices).map((c,i)=>({...c,label:letters[i]}));
-      attacks.push({id:'attack_'+attack,attack,prompt_id:p.id,prompt:p.text,caption:p.caption||'',choices});
+      if(!eligible.length){ problems.push(name+' has no complete robustness prompt for '+condition); robustProblem=true; break; }
+      const p=eligible.find(x=>!usedPromptIds.has(x.id)) || eligible[0];
+      usedPromptIds.add(p.id);
+      const raw=METHODS.map(method=>({method,url:condition==='no_attack'?img(name,'protected/'+method+'/'+p.id):img(name,'removed/'+condition+'/'+method+'/'+p.id)}));
+      const choices=shuffle(raw).map((c,i)=>({...c,label:letters(raw.length)[i]}));
+      robustness.push({id:'robustness_'+robustness.length,condition,prompt_id:p.id,prompt:p.text,choices});
     }
-    if(attacks.length!==manifest.config.attacks.length)continue;
+    if(robustProblem || robustness.length!==conditions.length) continue;
 
     return {
-      pid:'p_'+hashSeed(),created_at:new Date().toISOString(),version:'github-pages-v7',
-      artist:name,artist_display:a.display_name,
-      references:shuffle(a.references).slice(0,manifest.config.reference_count),
-      pairs:shuffle(pairs),attacks:shuffle(attacks),
-      progress:{stage:'consent',practice:0,pair:0,attack:0},answers:[],completed_at:null
+      pid:'p_'+hashSeed(), created_at:new Date().toISOString(), version:'github-pages-v8',
+      artist:name, artist_display:a.display_name,
+      references:shuffle(a.references).slice(0,Number(manifest.config.reference_count||6)),
+      quality, effectiveness, robustness:shuffle(robustness),
+      progress:{stage:'consent',practice:0,quality:0,effectiveness:0,robustness:0},
+      consent:null, verified:false, answers:[], completed_at:null
     };
   }
-  throw Error(problems.join('; ')||'No suitable artists configured');
+  throw new Error(problems.join('; ') || 'No suitable artists configured.');
 }
+
 let session;
-try{session=JSON.parse(localStorage.getItem(assignmentKey())||'null');if(!session)session=makeAssignment();save()}catch(e){content.innerHTML=`<div class="error"><h2>Dataset configuration problem</h2>${safe(e.message)}<p>Fill the required image directories and run <code>python3 scripts/build_manifest.py</code>.</p></div>`;setButton('Configuration required',false);throw e}
-const study={references:session.references,artist_display:session.artist_display,config:{familiarization_seconds:manifest.config.minimum_familiarization_seconds},pairs:session.pairs,attacks:session.attacks};
-let pid=session.pid,stage='consent',practiceIndex=session.progress.practice||0,trialIndex=session.progress.pair||0,attackIndex=session.progress.attack||0,startTick=Date.now();
-function setHeader(text,pct,foot){document.querySelector('footer.bottom').hidden=false;setBackButton(false);
- $('stepLabel').textContent=text;
- $('loadFill').style.width=Math.max(0,Math.min(100,pct))+'%';
- $('loadFill').parentElement.setAttribute('aria-valuenow',Math.round(pct));
- $('footerText').textContent=foot||'Art Style Protection Study';
- const steps={consent:'Consent',participant_information:'Contact details',background:'Background',artist_followup:'Artist experience',intro:'Familiarization',practice:'Training',pairs:'Protection evaluation',attacks:'Robustness evaluation',post_study:'Final questionnaire',finish:'Completed',declined:'Study closed'};
- $('stageCount').textContent=steps[stage]?'CURRENT SECTION · '+steps[stage]:'ART STYLE PROTECTION STUDY';
+try{
+  session=JSON.parse(localStorage.getItem(assignmentKey())||'null');
+  if(!session) session=makeAssignment();
+  save();
+}catch(e){
+  content.innerHTML=`<div class="error"><h2>Dataset configuration problem</h2><p>${safe(e.message)}</p><p>Run <code>python3 scripts/check_dataset.py</code> and <code>python3 scripts/build_manifest.py</code> after adding your data.</p></div>`;
+  setButton(false); throw e;
 }
-function setButton(text,enabled,fn){button.textContent=text;button.disabled=!enabled;button.onclick=fn||null}
-function setBackButton(show,fn){if(!backButton)return;backButton.hidden=!show;backButton.disabled=!show;backButton.onclick=show?(fn||null):null}
-function references(){return `<div class="refgrid">${study.references.map((u,i)=>`<img loading="lazy" src="${safe(u)}" alt="Reference artwork ${i+1}">`).join('')}</div>`}
-function imagePanel(url,label){return `<div class="imagepanel"><h3>Image ${label}</h3><img loading="lazy" src="${safe(url)}" alt="Image ${safe(label)}"></div>`}
 
-function timerGate(seconds,callback){let n=seconds;const tick=()=>{if(stage!=='intro')return;if(n<=0){$('timer').textContent='You may continue when ready.';setButton('Start practice →',true,callback);return}$('timer').textContent=`Please review the artworks for ${n} more seconds.`;setTimeout(()=>{n--;tick()},1000)};tick()}
+let stage=session.progress.stage||'consent';
+let practiceIndex=session.progress.practice||0;
+let qualityIndex=session.progress.quality||0;
+let effectivenessIndex=session.progress.effectiveness||0;
+let robustnessIndex=session.progress.robustness||0;
+let startTick=Date.now();
+
+function setHeader(label,pct,foot='Art Style Protection Study'){
+  $('stepLabel').textContent=label;
+  $('loadFill').style.width=Math.max(0,Math.min(100,pct))+'%';
+  $('loadFill').parentElement.setAttribute('aria-valuenow',Math.round(pct));
+  $('footerText').textContent=foot;
+  const names={consent:'Consent',verify:'Human verification',intro:'Familiarization',practice:'Practice',quality:'Artwork quality',effectiveness:'Protection effectiveness',robustness:'Robustness evaluation',finish:'Completed',declined:'Study closed'};
+  $('stageCount').textContent=names[stage]||'Study';
+  document.querySelector('footer.bottom').hidden=false;
+}
+function setButton(enabled,fn){ nextButton.textContent='Next'; nextButton.disabled=!enabled; nextButton.onclick=enabled?fn:null; }
+function setBackButton(show,fn){ backButton.hidden=!show; backButton.onclick=show?fn:null; }
+function goTop(){ window.scrollTo({top:0,behavior:'instant'}); }
+function references(urls=session.references){ return `<div class="refgrid">${urls.map((u,i)=>`<img src="${safe(u)}" alt="Reference artwork ${i+1}">`).join('')}</div>`; }
+function referenceDropdown(){ return `<details class="smallref"><summary>View reference artworks for this artist</summary>${references()}</details>`; }
+function imagePanel(c){ return `<div class="imagepanel"><h3>Image ${safe(c.label)}</h3><img src="${safe(c.url)}" alt="Image ${safe(c.label)}"></div>`; }
+function record(section,trial,answers){
+  const item={section,trial_id:trial.id,prompt_id:trial.prompt_id||null,condition:trial.condition||null,artwork_id:trial.artwork_id||null,displayed_choices:(trial.choices||[]).map(c=>({label:c.label,method:c.method,url:c.url})),answers,time_ms:Date.now()-startTick,submitted_at:new Date().toISOString()};
+  const idx=session.answers.findIndex(x=>x.section===section&&x.trial_id===trial.id);
+  if(idx>=0) session.answers[idx]=item; else session.answers.push(item);
+  save(); autosaveOnline();
+}
+function existing(section,id){ return session.answers.find(x=>x.section===section&&x.trial_id===id)?.answers||{}; }
+
 function renderConsent(){
- stage='consent';session.progress.stage='consent';save();setHeader('Research participation and consent',0,'Participation is voluntary');
- const email=manifest.config.student_email||'';const pairScreens=manifest.config.methods.length*Number(manifest.config.comparison_count_per_method||2);const robustnessScreens=manifest.config.attacks.length;const mainScreens=pairScreens+robustnessScreens;const evalQuestionText='four questions for each clean-vs-protected pair and six questions for each robustness set';
- content.innerHTML=`<div class="consent-layout">
- <aside class="consent-hero"><p class="kicker">ART STYLE PROTECTION STUDY · RESEARCH STUDY</p><h1>Research participation<br>and consent</h1><p class="hero-subtitle">Human Evaluation of Artistic Style Similarity in AI-Generated Images</p><div class="hero-rule"></div><p class="hero-note">Your perspective helps researchers understand how AI-generated images reflect artistic styles.</p></aside>
- <div class="consent-main"><div class="consent-card"><p class="consent-card-eyebrow">PLEASE READ BEFORE CONTINUING</p>
- <div class="consent-item"><span class="consent-icon blue" aria-hidden="true">♙</span><div><h2>Invitation to participate</h2><p>You are invited to participate in a research study investigating how people perceive artistic-style similarity in images generated by artificial intelligence (AI). Please read the following information carefully before deciding whether to participate.</p></div></div>
- <div class="consent-item"><span class="consent-icon amber" aria-hidden="true">▤</span><div><h2>Purpose of the research</h2><p>Modern generative AI systems can create images resembling the visual styles of existing artworks. Researchers have proposed methods that modify digital artwork to reduce the ability of AI models to imitate an artist's style.</p><p>This study evaluates techniques intended to reduce unauthorized imitation of artistic styles by generative AI systems. It compares the visual results of different protection methods using human judgments, including conditions where attempts have been made to remove protections.</p></div></div>
- <div class="consent-item"><span class="consent-icon violet" aria-hidden="true">▧</span><div><h2>What will you be asked to do?</h2><p>You will first review six reference artworks by an assigned artist and complete seven guided practice comparisons. You will then evaluate ${pairScreens} pairs of AI-generated images and ${robustnessScreens} robustness sets. You will answer ${evalQuestionText}. In the robustness section, you will compare only the six protected methods after a removal attack; no clean baseline is shown.</p><p>Artistic style may include color palette, brushwork, line quality, texture, shading, composition, and overall appearance. Protection method identities are hidden, and image order is randomized. Your judgments in the main evaluation have no predetermined correct or incorrect answers.</p></div></div>
- <div class="consent-duo"><div class="consent-item"><span class="consent-icon green" aria-hidden="true">◷</span><div><h2>Study duration and format</h2><p>The study contains <strong>${mainScreens} main evaluation screens</strong>, following seven practice exercises. Completion time varies depending on how long you inspect the images. A laptop or desktop with a sufficiently large screen is recommended. You may take short breaks and should avoid discussing your judgments with others while completing the study.</p></div></div><div class="consent-item"><span class="consent-icon rose" aria-hidden="true">◇</span><div><h2>Possible risks or discomforts</h2><p>Viewing images and making repeated comparisons may cause temporary eye strain, fatigue, or boredom. You may stop at any time.</p></div></div></div>
- <div class="consent-trio"><div class="consent-item"><span class="consent-icon blue" aria-hidden="true">▥</span><div><h2>Benefits</h2><p>You may not receive any direct personal benefit. Your responses may help researchers evaluate techniques intended to protect artistic work from unauthorized imitation by generative AI.</p></div></div><div class="consent-item"><span class="consent-icon amber" aria-hidden="true">♙</span><div><h2>Privacy and confidentiality</h2><p>After consent, you will be asked for your name and email address for research administration. These details will not be published or included in publicly shared research results. They are stored separately from evaluation responses and linked through a participant identifier. Your responses are associated with a randomly generated session identifier and may include image selections, experimental conditions, and time spent on individual comparisons. Findings may be reported in aggregate in academic publications or presentations.</p><p>${manifest.config.response_endpoint?'During the main evaluation, your study responses are securely autosaved to the configured research collection service. A final complete response is submitted when you finish the study.':'Responses are saved in this browser, not automatically transmitted. At completion, download your response file and send it through the researcher’s approved channel.'}</p></div></div><div class="consent-item"><span class="consent-icon violet" aria-hidden="true">◎</span><div><h2>Voluntary participation</h2><p>Participation is voluntary. You may decline or stop before submission without giving a reason. Your decision will not affect your relationship with the researchers or their institution.</p></div></div></div>
- <div class="consent-item"><span class="consent-icon blue" aria-hidden="true">✓</span><div><h2>Consent to participate</h2><p>By selecting “I agree to participate,” you confirm that you have read this information, understand the study procedures and voluntary nature of participation, understand how responses will be used, and agree to participate.</p></div></div>
- </div><div class="decision-panel"><button id="consentNo" type="button" class="quiet-button">I do not agree</button><button id="consentYes" type="button">I agree to participate →</button></div><p id="consentMessage" class="tiny" aria-live="polite"></p></div></div>`;
- setButton('Please choose above',false);
- $('consentYes').onclick=()=>{session.consent={consented:true,consent_version:'art-style-protection-consent-v1',timestamp:new Date().toISOString()};save();renderParticipantInformation();window.scrollTo(0,0)};
- $('consentNo').onclick=()=>{session.consent={consented:false,consent_version:'art-style-protection-consent-v1',timestamp:new Date().toISOString()};session.progress.stage='declined';save();renderDeclined()};
+  stage='consent';session.progress.stage=stage;save();setHeader('Consent to participate',2);setBackButton(false);setButton(false);
+  content.innerHTML=`<section class="consent-simple"><p class="kicker">Research participation</p><h1>Art Style Protection Study</h1><p class="sub">You are invited to take part in a research study about how people perceive original, protected, and AI-generated artwork.</p><div class="consent-box"><h2>What you will do</h2><p>You will view artworks and AI-generated images, compare their visual quality and artistic style, and answer short visual-evaluation questions. The study is designed for desktop or laptop use.</p><h2>Time and risks</h2><p>The study is expected to take approximately 15–25 minutes. Risks are minimal and similar to ordinary computer use.</p><h2>Privacy</h2><p>Your responses are linked to a randomly generated participant ID and submitted to the study's research collection service. Results may be reported in aggregate.</p><h2>Voluntary participation</h2><p>Participation is voluntary. You may stop at any time before completing the study.</p><div class="consent-actions"><button id="consentYes">I consent and wish to continue</button><button id="consentNo" class="quiet-button">I do not consent</button></div></div></section>`;
+  $('consentYes').onclick=()=>{session.consent={consented:true,at:new Date().toISOString()};session.progress.stage='verify';save();renderVerify();goTop();};
+  $('consentNo').onclick=()=>{session.consent={consented:false,at:new Date().toISOString()};session.progress.stage='declined';save();renderDeclined();};
 }
-function renderDeclined(){stage='declined';setHeader('Participation declined',0);content.innerHTML='<div class="center"><h1>Thank you for considering this study.</h1><p>You chose not to participate. No evaluation responses have been submitted.</p></div>';setButton('Study closed',false)}
-function renderParticipantInformation(){
- stage='participant_information';session.progress.stage=stage;save();
- setHeader('Participant information',2,'Contact details · Confidential research information');
- setButton('Continue',true,()=>document.getElementById('participantForm').requestSubmit());
- const existing=JSON.parse(localStorage.getItem('art_style_protection_contact_'+session.pid)||'null')||{};
- content.innerHTML=`<div class="background-layout"><div class="background-heading"><span class="background-kicker">ART STYLE PROTECTION STUDY · PARTICIPANT INFORMATION</span><h1>Your contact information</h1><p class="sub">Please provide your details before beginning the study.</p></div><form id="participantForm" class="background-card participant-card"><div class="participant-privacy"><h2>Privacy and confidentiality</h2><p>Your name and email address are collected for research administration only. They will not be published or included in publicly shared research results. Study findings will be reported without identifying individual participants.</p><p>Your name, email address, and study answers are stored confidentially through the study's secure response-collection service and will not be published with identifying information.</p></div><div class="participant-field"><label for="participantName">Full name <span aria-hidden="true">*</span></label><input id="participantName" name="full_name" type="text" autocomplete="name" maxlength="150" required placeholder="Enter your full name" value="${safe(existing.full_name||'')}"></div><div class="participant-field"><label for="participantEmail">Email address <span aria-hidden="true">*</span></label><input id="participantEmail" name="email" type="email" autocomplete="email" maxlength="254" required placeholder="Enter your email address" value="${safe(existing.email||'')}"></div><p id="participantError" class="background-error" role="alert" aria-live="polite"></p></form></div>`;
- $('participantForm').onsubmit=e=>{e.preventDefault();const form=e.currentTarget;if(!form.reportValidity())return;const full_name=$('participantName').value.trim(),email=$('participantEmail').value.trim();if(!full_name||!email){$('participantError').textContent='Please enter your name and email address.';return;}localStorage.setItem('art_style_protection_contact_'+session.pid,JSON.stringify({participant_id:session.pid,full_name,email,collected_at:new Date().toISOString()}));session.contact_collected=true;save();renderBackground();window.scrollTo(0,0)};
+function renderDeclined(){stage='declined';setHeader('Study closed',0);document.querySelector('footer.bottom').hidden=true;content.innerHTML=`<div class="center" style="padding:80px 10px"><h1>Participation declined</h1><p class="sub" style="margin:0 auto">No study evaluation will be collected.</p></div>`;}
+
+function renderVerify(){
+  stage='verify';session.progress.stage=stage;save();setHeader('Human verification',5);setBackButton(true,()=>{renderConsent();goTop();});setButton(false);
+  const siteKey=manifest.config.turnstile_site_key||'1x00000000000000000000AA';
+  content.innerHTML=`<section class="verify-card"><span class="pill">Human verification</span><h1>One quick check before you begin</h1><p>Please complete the verification below. This helps prevent automated or duplicate study submissions.</p><div id="turnstileMount" class="cf-turnstile" data-sitekey="${safe(siteKey)}" data-callback="mirageTurnstilePassed" data-expired-callback="mirageTurnstileExpired"></div><p id="verifyStatus" class="tiny"></p></section>`;
+  window.mirageTurnstilePassed=async token=>{
+    $('verifyStatus').textContent='Verification received.';
+    const endpoint=manifest.config.turnstile_verify_endpoint||'';
+    if(endpoint){
+      try{
+        const res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({type:'turnstile_verify',token,pid:session.pid})});
+        if(!res.ok) throw new Error('HTTP '+res.status);
+        const data=await res.json().catch(()=>({success:true}));
+        if(data.success===false) throw new Error('Verification rejected');
+      }catch(e){ $('verifyStatus').textContent='Verification could not be confirmed. Please try again.'; setButton(false); return; }
+    }
+    session.verified=true;session.verified_at=new Date().toISOString();save();setButton(true,()=>{renderIntro();goTop();});
+  };
+  window.mirageTurnstileExpired=()=>{session.verified=false;save();$('verifyStatus').textContent='Verification expired. Please complete it again.';setButton(false);};
+  // In case Turnstile loaded before this screen was rendered, explicitly render it.
+  setTimeout(()=>{if(window.turnstile && $('turnstileMount') && !$('turnstileMount').querySelector('iframe')){try{turnstile.render('#turnstileMount',{sitekey:siteKey,callback:window.mirageTurnstilePassed,'expired-callback':window.mirageTurnstileExpired});}catch(_){}}},250);
 }
-function renderBackground(){
- stage='background';session.progress.stage=stage;save();setHeader('Participant background questionnaire',3,'');
- const artOptions=['No experience','Casual/hobby experience','Art student','Part-time/freelance artist','Full-time/professional artist','Other'];
- const frequencyOptions=['Never','Once or twice','Occasionally','Frequently','Very frequently'];
- const familiarityOptions=['Not at all familiar','Slightly familiar','Moderately familiar','Very familiar','Extremely familiar'];
- const choices=(name,items,numbered=false)=>items.map((value,i)=>`<label class="background-option"><input type="radio" name="${name}" value="${safe(value)}"><span>${numbered?`${i+1} - `:''}${safe(value)}</span></label>`).join('');
- content.innerHTML=`<div class="background-layout"><div class="background-heading"><span class="background-kicker">ART STYLE PROTECTION STUDY · PARTICIPANT QUESTIONNAIRE</span><h1>A little about your experience</h1><p class="sub">Before viewing the artwork, please answer four short questions about your experience with visual art and generative AI.</p></div>
- <form id="backgroundForm" class="background-card" novalidate>
- <fieldset class="background-question"><legend><span class="background-number">01</span>Art background</legend><p>Which best describes your experience with creating visual art?</p><div class="background-options">${choices('art_background',artOptions)}</div><div id="otherArtWrap" class="background-other" hidden><label for="otherArt">Please specify</label><input id="otherArt" type="text" maxlength="200" placeholder="Describe your experience"></div></fieldset>
- <fieldset class="background-question"><legend><span class="background-number">02</span>Familiarity with generative AI</legend><p>How familiar are you with AI image-generation tools such as Stable Diffusion, Midjourney, or DALL·E?</p><div class="background-options background-scale">${choices('ai_familiarity',familiarityOptions,true)}</div></fieldset>
- <fieldset class="background-question"><legend><span class="background-number">03</span>Experience using generative AI</legend><p>How often have you used AI image-generation tools?</p><div class="background-options">${choices('ai_usage',frequencyOptions)}</div></fieldset>
- <fieldset class="background-question"><legend><span class="background-number">04</span>Familiarity with AI style mimicry</legend><p>Before participating in this study, how familiar were you with the use of generative AI to imitate or reproduce an artist's visual style?</p><div class="background-options background-scale">${choices('style_mimicry_familiarity',familiarityOptions,true)}</div></fieldset>
- <p class="background-footnote">Your answers will be stored with your study responses under your randomly generated participant identifier.</p><p id="backgroundError" class="background-error" role="alert" aria-live="polite"></p></form></div>`;
- const form=$('backgroundForm');
- const selected=name=>form.querySelector(`input[name="${name}"]:checked`)?.value||null;
- const valid=()=>!!(selected('art_background')&&selected('ai_familiarity')&&selected('ai_usage')&&selected('style_mimicry_familiarity')&&(selected('art_background')!=='Other'||$('otherArt').value.trim()));
- const update=()=>{$('otherArtWrap').hidden=selected('art_background')!=='Other';$('backgroundError').textContent='';setButton(ARTIST_BACKGROUNDS.includes(selected('art_background'))?'Continue →':'Continue →',valid(),submit)};
- const submit=()=>{if(!valid()){ $('backgroundError').textContent='Please answer all four questions.';return;}
-  session.background={art_background:selected('art_background'),art_background_other:selected('art_background')==='Other'?$('otherArt').value.trim():null,ai_familiarity:Number(familiarityOptions.indexOf(selected('ai_familiarity'))+1),ai_usage:selected('ai_usage'),style_mimicry_familiarity:Number(familiarityOptions.indexOf(selected('style_mimicry_familiarity'))+1),submitted_at:new Date().toISOString()};
-  save();if(ARTIST_BACKGROUNDS.includes(session.background.art_background))renderArtistFollowup();else renderIntro();window.scrollTo(0,0);
- };
- form.querySelectorAll('input[type="radio"]').forEach(el=>el.addEventListener('change',update));$('otherArt').addEventListener('input',update);
- form.addEventListener('submit',e=>{e.preventDefault();submit()});setButton('Continue to artist familiarization →',false,submit);
+
+function renderIntro(){
+  stage='intro';session.progress.stage=stage;save();setHeader('Artist familiarization',10);setBackButton(false);setButton(false);
+  content.innerHTML=`<div class="center"><span class="pill">Assigned artist · Study reference</span><h1>Familiarize yourself with this artistic style</h1><p class="sub" style="margin:0 auto">The six artworks below are examples of the same artist's work. You will evaluate only this artist's style throughout the study.</p><div class="notice">Observe the colors, shapes, textures, brushwork and overall visual character. Focus on style rather than the subjects depicted.</div></div>${references()}<div class="center"><div class="chips"><span class="chip">Color palette</span><span class="chip">Shapes and forms</span><span class="chip">Texture and brushwork</span><span class="chip">Composition</span></div><p id="timer" class="tiny" style="margin-top:20px"></p></div>`;
+  const sec=Number(manifest.config.minimum_familiarization_seconds||15);let left=sec;$('timer').textContent=`Please review the artworks for ${left} seconds.`;
+  const timer=setInterval(()=>{left--;if(left>0){$('timer').textContent=`Please review the artworks for ${left} seconds.`;}else{clearInterval(timer);$('timer').textContent='You may continue when ready.';setButton(true,()=>{practiceIndex=0;renderPractice();goTop();});}},1000);
 }
-function renderArtistFollowup(){
- stage='artist_followup';session.progress.stage=stage;save();setHeader('Artist experience questionnaire',4,'Five questions · For participants with an art background');
- const years=['Less than 1 year','1-5 years','6-10 years','More than 10 years'];
- const media=['Digital illustration','Painting','Drawing','Photography','Graphic design','3D art','Mixed media','Other'];
- const sharing=['Never','Rarely','Sometimes','Often','Very often'];
- const importance=['Not important at all','Slightly important','Moderately important','Very important','Extremely important'];
- const awareness=['Yes','No','Unsure','Prefer not to say'];
- const radios=(name,values,numbered=false)=>values.map((v,i)=>`<label class="background-option"><input type="radio" name="${name}" value="${safe(v)}"><span>${numbered?`${i+1} - `:''}${safe(v)}</span></label>`).join('');
- const checks=media.map(v=>`<label class="background-option"><input type="checkbox" name="art_medium" value="${safe(v)}"><span>${safe(v)}</span></label>`).join('');
- content.innerHTML=`<div class="background-layout"><div class="background-heading"><span class="background-kicker">ART STYLE PROTECTION STUDY · ARTIST QUESTIONNAIRE</span><h1>Your artistic practice</h1><p class="sub">Please tell us a little more about your experience creating and sharing visual artwork.</p></div>
- <form id="artistForm" class="background-card" novalidate>
- <fieldset class="background-question"><legend><span class="background-number">01</span>Years of artistic experience</legend><p>How many years have you been creating visual artwork?</p><div class="background-options">${radios('artist_years',years)}</div></fieldset>
- <fieldset class="background-question"><legend><span class="background-number">02</span>Primary artistic medium</legend><p>What type(s) of visual art do you primarily create? <span class="tiny">Select all that apply.</span></p><div class="background-options">${checks}</div><div id="artistOtherWrap" class="background-other" hidden><label for="artistOther">Please specify</label><input id="artistOther" type="text" maxlength="200" placeholder="Describe your medium"></div></fieldset>
- <fieldset class="background-question"><legend><span class="background-number">03</span>Online sharing of artwork</legend><p>How often do you share or publish your artwork online?</p><div class="background-options">${radios('artist_sharing',sharing)}</div></fieldset>
- <fieldset class="background-question"><legend><span class="background-number">04</span>Importance of online publication</legend><p>How important is sharing your artwork online to your artistic practice or career?</p><div class="background-options background-scale">${radios('artist_importance',importance,true)}</div></fieldset>
- <fieldset class="background-question"><legend><span class="background-number">05</span>Personal experience with AI style mimicry</legend><p>Are you aware of your artwork or artistic style having been used or imitated by generative AI?</p><div class="background-options">${radios('artist_mimicry',awareness)}</div></fieldset>
- <p class="background-footnote">Your answers will be stored with your study responses under your randomly generated participant identifier.</p><p id="artistError" class="background-error" role="alert" aria-live="polite"></p></form></div>`;
- const form=$('artistForm');
- const selected=name=>form.querySelector(`input[name="${name}"]:checked`)?.value||null;
- const selectedMedia=()=>[...form.querySelectorAll('input[name="art_medium"]:checked')].map(el=>el.value);
- const valid=()=>!!(selected('artist_years')&&selectedMedia().length&&(!selectedMedia().includes('Other')||$('artistOther').value.trim())&&selected('artist_sharing')&&selected('artist_importance')&&selected('artist_mimicry'));
- const submit=()=>{if(!valid()){$('artistError').textContent='Please answer all five questions.';return;}
- session.artist_background={years_of_experience:selected('artist_years'),primary_artistic_media:selectedMedia(),primary_artistic_medium_other:selectedMedia().includes('Other')?$('artistOther').value.trim():null,online_sharing_frequency:selected('artist_sharing'),online_publication_importance:importance.indexOf(selected('artist_importance'))+1,ai_style_mimicry_awareness:selected('artist_mimicry'),submitted_at:new Date().toISOString()};
- save();renderIntro();window.scrollTo(0,0);
- };
- const update=()=>{$('artistOtherWrap').hidden=!selectedMedia().includes('Other');$('artistError').textContent='';setButton('Continue to artist familiarization →',valid(),submit)};
- form.querySelectorAll('input').forEach(el=>el.addEventListener(el.type==='text'?'input':'change',update));
- form.addEventListener('submit',e=>{e.preventDefault();submit()});update();
-}
-function renderIntro(){stage='intro';session.progress.stage=stage;save();setHeader('Step 1 / 5 · Artist familiarization',5);content.innerHTML=`<div class="center"><span class="pill">Assigned artist · Study reference</span><h1>Familiarize yourself with this artistic style</h1><p class="sub" style="margin:0 auto">The six artworks below are examples of the same artist's work. You will evaluate only this artist's style throughout the study.</p><div class="notice">Observe the colors, shapes, textures, brushwork and overall visual character. Focus on style rather than the subjects depicted.</div></div>${references()}<div class="center"><div class="chips"><span class="chip">Color palette</span><span class="chip">Shapes and forms</span><span class="chip">Texture and brushwork</span><span class="chip">Composition</span></div><p id="timer" class="tiny" style="margin-top:20px"></p></div>`;setButton('Please review…',false);timerGate(study.config.familiarization_seconds,()=>{practiceIndex=0;renderPractice()})}
-function practiceReferences(x){
- if(!x.references||!x.references.length)return '';
- return `<details class="smallref practice-reference" open><summary>Practice reference artworks</summary><div class="refgrid">${x.references.map((u,i)=>`<img loading="lazy" src="${safe(u)}" alt="Practice reference artwork ${i+1}">`).join('')}</div></details>`;
-}
+
 function renderPractice(){
- stage='practice';session.progress.stage=stage;session.progress.practice=practiceIndex;save();
- const x=TRAIN[practiceIndex];
- setHeader(`Step 2 / 5 · Training ${practiceIndex+1}/7`,12+practiceIndex*3,'Practice images — not used in the main evaluation');
- content.innerHTML=`<span class="pill">Guided training · Practice ${practiceIndex+1} of 7</span><h1>${safe(x.kind)}</h1><p class="sub">${safe(x.desc)}</p>${practiceReferences(x)}<div class="gallery2">${imagePanel(x.a,'A')}${imagePanel(x.b,'B')}</div><div class="question"><strong>Choose your answer</strong><div class="options"><label class="option"><input type="radio" name="train" value="A">Image A</label><label class="option"><input type="radio" name="train" value="B">Image B</label></div></div><div id="feedback"></div>`;
- const check=()=>{const a=content.querySelector('input[name="train"]:checked')?.value;if(!a)return;const ok=a===x.right;$('feedback').innerHTML=`<div class="result ${ok?'':'wrong'}"><strong>${ok?'Correct!':'Not quite.'}</strong> ${safe(x.why)}</div>`;content.querySelectorAll('input[name="train"]').forEach(el=>el.disabled=true);setButton(practiceIndex===6?'Begin main evaluation →':'Next practice →',true,()=>{practiceIndex++;if(practiceIndex===7){trialIndex=0;renderPair()}else renderPractice()})};
- setButton('Check answer',false,check);
- content.querySelectorAll('input[name="train"]').forEach(el=>el.onchange=()=>setButton('Check answer',true,check));
+  stage='practice';session.progress.stage=stage;session.progress.practice=practiceIndex;save();setHeader('Practice',14+(practiceIndex/PRACTICE.length)*12);setBackButton(practiceIndex>0,()=>{practiceIndex--;renderPractice();goTop();});
+  const x=PRACTICE[practiceIndex];
+  const refs=x.references?`<details class="smallref" open><summary>Practice reference artworks</summary>${references(x.references)}</details>`:'';
+  content.innerHTML=`<div class="practice-layout"><div class="practice-meta">Practice ${practiceIndex+1} of ${PRACTICE.length}</div><h1>${safe(x.kind)}</h1><p class="sub">${safe(x.instruction)}</p>${refs}<div class="gallery2">${imagePanel({label:'A',url:x.a})}${imagePanel({label:'B',url:x.b})}</div><div class="question"><strong>Your answer</strong><div class="options"><label class="option"><input type="radio" name="train" value="A">Image A</label><label class="option"><input type="radio" name="train" value="B">Image B</label></div></div><div id="feedback"></div></div>`;
+  setButton(false);
+  content.querySelectorAll('input[name="train"]').forEach(el=>el.onchange=()=>{
+    const a=content.querySelector('input[name="train"]:checked')?.value;
+    const ok=a===x.right;
+    $('feedback').innerHTML=`<div class="result ${ok?'':'wrong'}"><strong>${ok?'Correct!':'Not quite.'}</strong> ${safe(x.why)}</div>`;
+    content.querySelectorAll('input[name="train"]').forEach(r=>r.disabled=true);
+    setButton(true,()=>{practiceIndex++;if(practiceIndex===PRACTICE.length){qualityIndex=0;renderQuality();}else renderPractice();goTop();});
+  });
 }
-function existingAnswers(section,trial){return session.answers.find(a=>a.section===section&&a.trial_id===trial.id)?.answers||{}}
-function questionForm(trial,labels,isAttack=false){
- const qs=trialQuestions(trial,isAttack),section=isAttack?'attacks':'pairs',prior=existingAnswers(section,trial);
- return qs.map(([key,q],i)=>{
-   const imageOptions=labels.map(label=>`<label class="option"><input type="radio" name="q_${key}" value="${label}" ${prior[key]===label?'checked':''}>Image ${label}</label>`).join('');
-   const sameOption=!isAttack?`<label class="option same-option"><input type="radio" name="q_${key}" value="same" ${prior[key]==='same'?'checked':''}>About the same</label>`:'';
-   return `<div class="question"><strong>${i+1}. ${safe(q)}</strong><div class="options">${imageOptions}${sameOption}</div></div>`;
- }).join('')
+
+function zoomable(url,alt){ return `<div class="zoom-wrap" data-zoom="${safe(url)}"><img src="${safe(url)}" alt="${safe(alt)}"><div class="zoom-lens"></div></div>`; }
+function bindMagnifiers(){
+  content.querySelectorAll('.zoom-wrap').forEach(w=>{
+    const lens=w.querySelector('.zoom-lens'), imgEl=w.querySelector('img'), src=w.dataset.zoom;
+    const setup=()=>{lens.style.backgroundImage=`url("${src}")`;}; if(imgEl.complete) setup(); else imgEl.onload=setup;
+    w.addEventListener('mousemove',e=>{const r=w.getBoundingClientRect();const x=e.clientX-r.left,y=e.clientY-r.top;const size=150,half=size/2;lens.style.left=Math.max(0,Math.min(r.width-size,x-half))+'px';lens.style.top=Math.max(0,Math.min(r.height-size,y-half))+'px';const px=(x/r.width)*100,py=(y/r.height)*100;lens.style.backgroundSize=(r.width*2.5)+'px '+(r.height*2.5)+'px';lens.style.backgroundPosition=`${px}% ${py}%`;});
+    w.addEventListener('click',()=>openModal(src));
+  });
 }
-function answers(trial,isAttack=false){const out={};for(const [key] of trialQuestions(trial,isAttack)){const el=content.querySelector(`[name="q_${key}"]:checked`);if(!el)return null;out[key]=el.value}return out}
-function bindAnswers(trial,isAttack,fn){const n=trialQuestions(trial,isAttack).length;const update=()=>setButton(`Submit ${n} answers →`,!!answers(trial,isAttack),fn);content.querySelectorAll('input[type=radio]').forEach(el=>el.onchange=update);update()}
-function evaluationBlock(trial,isAttack,index,total){const labels=trial.choices.map(c=>c.label);const n=trialQuestions(trial,isAttack).length;const caption=!isAttack&&trial.caption&&String(trial.caption).trim()?`<div class="prompt"><span>AI-generated caption:</span> ${safe(trial.caption)}</div>`:'';const guidance=isAttack?`All six images were generated after the same removal attack and correspond to the same target artist and generation prompt. Method names are hidden and image positions are randomized. For each question, select the image that best matches the criterion being asked.`:`One image was generated from a model trained on clean artwork and the other from a model trained on protected artwork. Their positions are randomized and method names are hidden. Please answer all ${n} questions.`;return `<span class="pill">${isAttack?'Robustness evaluation':'Protection evaluation'} · ${index+1} of ${total}</span><h1>${isAttack?'Compare six protected outputs after removal':'Compare two AI-generated images'}</h1><p class="sub">${guidance}</p><details class="smallref"><summary>View reference artworks for this artist</summary>${references()}</details><div class="prompt"><span>Generation prompt:</span> ${safe(trial.prompt)}</div>${caption}<div class="${isAttack?'attack-gallery':'gallery2 pair-gallery'}">${trial.choices.map(c=>imagePanel(c.url,c.label)).join('')}</div><h2>Your evaluations</h2>${questionForm(trial,labels,isAttack)}`}
-function recordAnswer(section,trial,chosen){
- const item={section,trial_id:trial.id,prompt_id:trial.prompt_id,attack:trial.attack||null,displayed_choices:trial.choices.map(c=>({label:c.label,method:c.method,url:c.url})),answers:chosen,time_ms:Date.now()-startTick,submitted_at:new Date().toISOString()};
- const i=session.answers.findIndex(a=>a.section===section&&a.trial_id===trial.id);
- if(i>=0)session.answers[i]=item;else session.answers.push(item);
- save();
- autosaveOnline();
+function openModal(src){$('modalImage').src=src;$('imageModal').hidden=false;}
+$('closeModal').onclick=()=>{$('imageModal').hidden=true;$('modalImage').src='';};$('imageModal').addEventListener('click',e=>{if(e.target===$('imageModal'))$('closeModal').click();});
+
+function renderQuality(){
+  stage='quality';session.progress.stage=stage;session.progress.quality=qualityIndex;save();startTick=Date.now();setHeader('Protected artwork quality',28+(qualityIndex/session.quality.length)*16);setBackButton(qualityIndex>0,()=>{qualityIndex--;renderQuality();goTop();});
+  const t=session.quality[qualityIndex], prior=existing('quality',t.id);
+  const cards=t.choices.map(c=>`<div class="quality-card"><div class="label">Image ${safe(c.label)}</div>${zoomable(c.url,'Protected artwork '+c.label)}<div class="quality-rating"><strong>Visual quality compared with the original</strong><div class="scale-options">${[1,2,3,4,5].map(n=>`<label><input type="radio" name="quality_${c.label}" value="${n}" ${Number(prior[c.label])===n?'checked':''}><span>${n}</span></label>`).join('')}</div><div class="scale-help"><span>Much worse</span><span>Same quality</span></div></div></div>`).join('');
+  content.innerHTML=`<h1>Protected artwork quality</h1><div class="instruction-card"><strong>Use the original artwork above as the direct visual reference.</strong> Compare each protected image with the original image and rate its visual quality.</div><p class="quality-note">Protection methods modify artwork before it is shared, so it is important that the protected version preserves the visual quality of the original.</p>${referenceDropdown()}<div class="quality-original"><div class="imagepanel"><h3>Original artwork</h3>${zoomable(t.original,'Original artwork')}</div></div><h2>Compare with the original</h2><p class="tiny">Hover over an image to magnify fine details. Click an image to open a larger view.</p><div class="quality-grid">${cards}</div>`;
+  bindMagnifiers();
+  const collect=()=>{const out={};for(const c of t.choices){const e=content.querySelector(`[name="quality_${c.label}"]:checked`);if(!e)return null;out[c.label]=Number(e.value);}return out;};
+  const update=()=>setButton(Boolean(collect()),()=>{const a=collect();if(!a)return;record('quality',t,a);qualityIndex++;if(qualityIndex===session.quality.length){effectivenessIndex=0;renderEffectiveness();}else renderQuality();goTop();});
+  content.querySelectorAll('input[type=radio]').forEach(e=>e.onchange=update);update();
 }
-function renderPair(){stage='pairs';session.progress={stage,practice:7,pair:trialIndex,attack:attackIndex};save();startTick=Date.now();const trial=study.pairs[trialIndex];setHeader(`Step 3 / 5 · Protection evaluation ${trialIndex+1} of ${study.pairs.length}`,34+(trialIndex/study.pairs.length)*36);if(trialIndex>0)setBackButton(true,()=>{trialIndex--;renderPair();window.scrollTo(0,0)});content.innerHTML=evaluationBlock(trial,false,trialIndex,study.pairs.length);const submit=()=>{const a=answers(trial,false);if(!a)return;recordAnswer('pairs',trial,a);trialIndex++;if(trialIndex===study.pairs.length){attackIndex=0;renderAttack()}else renderPair();window.scrollTo(0,0)};bindAnswers(trial,false,submit)}
-function renderAttack(){stage='attacks';session.progress={stage,practice:7,pair:study.pairs.length,attack:attackIndex};save();startTick=Date.now();const trial=study.attacks[attackIndex];setHeader(`Step 4 / 5 · Robustness evaluation ${attackIndex+1} of ${study.attacks.length}`,72+(attackIndex/study.attacks.length)*25);setBackButton(true,()=>{if(attackIndex>0){attackIndex--;renderAttack()}else{trialIndex=study.pairs.length-1;renderPair()}window.scrollTo(0,0)});content.innerHTML=evaluationBlock(trial,true,attackIndex,study.attacks.length);const submit=()=>{const a=answers(trial,true);if(!a)return;recordAnswer('attacks',trial,a);attackIndex++;if(attackIndex===study.attacks.length){renderPostStudy()}else renderAttack();window.scrollTo(0,0)};bindAnswers(trial,true,submit)}
-function renderPostStudy(){
- stage='post_study';session.progress.stage=stage;save();setHeader('Step 5 / 5 · Post-study questionnaire',98,'Please share your views about AI and artistic styles');setBackButton(true,()=>{attackIndex=study.attacks.length-1;renderAttack();window.scrollTo(0,0)});
- const labels=['Strongly disagree','Disagree','Neither agree nor disagree','Agree','Strongly agree'];
- const previous=session.post_study_draft||{};
- const items=POST_STUDY_QUESTIONS.map(([key,title,statement],i)=>`<fieldset class="background-question poststudy-question"><legend><span class="background-number">${String(i+1).padStart(2,'0')}</span>${safe(title)}</legend><p>${safe(statement)}</p><div class="background-options background-scale">${labels.map((label,j)=>`<label class="background-option"><input type="radio" name="post_${key}" value="${j+1}" ${previous[key]===j+1?'checked':''}><span>${j+1}</span></label>`).join('')}</div></fieldset>`).join('');
- content.innerHTML=`<div class="background-layout poststudy-layout"><div class="background-heading"><span class="background-kicker">ART STYLE PROTECTION STUDY · FINAL QUESTIONNAIRE</span><h1>Your views on AI and artistic work</h1><p class="sub">You have finished all image comparisons. Please indicate how much you agree or disagree with each statement.</p></div><form id="postStudyForm" class="background-card" novalidate><div class="likert-guide" aria-label="Rating scale explanation"><h2>Rating scale</h2><p>For each of the following ten statements, select a number from 1 to 5 based on how much you agree or disagree.</p><div class="likert-guide-grid">${labels.map((label,i)=>`<div class="likert-guide-item"><span class="likert-guide-number">${i+1}</span><span>${safe(label)}</span></div>`).join('')}</div></div>${items}<div class="poststudy-open"><h2>Concerns About Artists’ Work in Generative AI</h2><label for="postStudyConcern">What is your main concern, if any, about the use of artists’ work by generative AI systems? Please explain briefly.</label><textarea id="postStudyConcern" rows="5" maxlength="3000" placeholder="Share your thoughts (optional)">${safe(previous.main_concern||'')}</textarea><p class="tiny">You may leave this blank if you have no concern.</p></div><p id="postStudyError" class="background-error" role="alert" aria-live="polite"></p></form></div>`;
- const form=$('postStudyForm');
- const collect=()=>{const result={};for(const [key] of POST_STUDY_QUESTIONS){const selected=form.querySelector(`[name="post_${key}"]:checked`);if(selected)result[key]=Number(selected.value)}result.main_concern=$('postStudyConcern').value.trim();return result};
- const valid=()=>POST_STUDY_QUESTIONS.every(([key])=>!!form.querySelector(`[name="post_${key}"]:checked`));
- const saveDraft=()=>{session.post_study_draft=collect();save();setButton('Complete study →',valid(),submit)};
- const submit=()=>{if(!valid()){$('postStudyError').textContent='Please respond to all ten statements.';return}session.post_study={...collect(),submitted_at:new Date().toISOString()};delete session.post_study_draft;session.completed_at=new Date().toISOString();session.progress.stage='finish';save();renderFinish();window.scrollTo(0,0)};
- form.addEventListener('change',saveDraft);$('postStudyConcern').addEventListener('input',saveDraft);form.addEventListener('submit',e=>{e.preventDefault();submit()});setButton('Complete study →',valid(),submit);
+
+function ratingCell(trialId,label,key,prior){ return `<div class="scale-options">${[1,2,3,4,5].map(n=>`<label><input type="radio" name="r_${trialId}_${label}_${key}" value="${n}" ${Number(prior?.[label]?.[key])===n?'checked':''}><span>${n}</span></label>`).join('')}</div>`; }
+function renderEffectiveness(){
+  stage='effectiveness';session.progress.stage=stage;session.progress.effectiveness=effectivenessIndex;save();startTick=Date.now();setHeader('Protection effectiveness',46+(effectivenessIndex/session.effectiveness.length)*24);setBackButton(effectivenessIndex>0,()=>{effectivenessIndex--;renderEffectiveness();goTop();});
+  const t=session.effectiveness[effectivenessIndex],prior=existing('effectiveness',t.id);
+  content.innerHTML=`<h1>Protection effectiveness</h1><div class="instruction-card">Use the reference artworks and the generation prompt to evaluate each image. Give each image a score from 1 to 5 for the three questions below.</div>${referenceDropdown()}<div class="prompt"><span>Generation prompt:</span> ${safe(t.prompt)}</div><div class="gallery7">${t.choices.map(imagePanel).join('')}</div><div class="rating-wrap"><table class="rating-table"><thead><tr><th>Image</th><th>How closely does this image match the artistic style of the reference artworks?<br><span class="tiny">1 = Not at all · 5 = Extremely closely</span></th><th>How would you rate the overall visual quality of this image?<br><span class="tiny">1 = Very poor · 5 = Excellent</span></th><th>How well does this image match the generation prompt?<br><span class="tiny">1 = Not at all · 5 = Extremely well</span></th></tr></thead><tbody>${t.choices.map(c=>`<tr><td>Image ${c.label}</td><td>${ratingCell(t.id,c.label,'style',prior)}</td><td>${ratingCell(t.id,c.label,'quality',prior)}</td><td>${ratingCell(t.id,c.label,'prompt',prior)}</td></tr>`).join('')}</tbody></table></div>`;
+  const collect=()=>{const out={};for(const c of t.choices){out[c.label]={};for(const key of ['style','quality','prompt']){const e=content.querySelector(`[name="r_${t.id}_${c.label}_${key}"]:checked`);if(!e)return null;out[c.label][key]=Number(e.value);}}return out;};
+  const update=()=>setButton(Boolean(collect()),()=>{const a=collect();if(!a)return;record('effectiveness',t,a);effectivenessIndex++;if(effectivenessIndex===session.effectiveness.length){robustnessIndex=0;renderRobustness();}else renderEffectiveness();goTop();});
+  content.querySelectorAll('input[type=radio]').forEach(e=>e.onchange=update);update();
 }
+
+function renderRobustness(){
+  stage='robustness';session.progress.stage=stage;session.progress.robustness=robustnessIndex;save();startTick=Date.now();setHeader('Robustness evaluation',72+(robustnessIndex/session.robustness.length)*23);setBackButton(robustnessIndex>0,()=>{robustnessIndex--;renderRobustness();goTop();});
+  const t=session.robustness[robustnessIndex],prior=existing('robustness',t.id);
+  content.innerHTML=`<h1>Robustness evaluation</h1><div class="instruction-card">Use the reference artworks to judge the artistic style of the generated images. Select the image that <strong>least resembles the artistic style shown in the reference artworks</strong>.</div>${referenceDropdown()}<div class="prompt"><span>Generation prompt:</span> ${safe(t.prompt)}</div><div class="robust-gallery">${t.choices.map(imagePanel).join('')}</div><div class="robust-question"><h2>Which image least resembles the reference artist's style?</h2><div class="options">${t.choices.map(c=>`<label class="option"><input type="radio" name="robust" value="${c.label}" ${prior.choice===c.label?'checked':''}>Image ${c.label}</label>`).join('')}</div></div>`;
+  const update=()=>{const e=content.querySelector('input[name="robust"]:checked');setButton(Boolean(e),()=>{const chosen=content.querySelector('input[name="robust"]:checked')?.value;if(!chosen)return;record('robustness',t,{choice:chosen});robustnessIndex++;if(robustnessIndex===session.robustness.length){session.completed_at=new Date().toISOString();session.progress.stage='finish';save();renderFinish();}else renderRobustness();goTop();});};
+  content.querySelectorAll('input[name="robust"]').forEach(e=>e.onchange=update);update();
+}
+
 function getResponsePayload(){
- const contact=JSON.parse(localStorage.getItem('art_style_protection_contact_'+session.pid)||'null');
- return {
-  participant_information:contact?{full_name:contact.full_name,email:contact.email,collected_at:contact.collected_at}:null,
-  format_version:'art-style-protection-github-pages-v7',
-  study_title:manifest.config.study_title,
-  participant_id:session.pid,
-  artist:session.artist,
-  created_at:session.created_at,
-  completed_at:session.completed_at,
-  consent:session.consent||null,
-  background:session.background||null,
-  artist_background:session.artist_background||null,
-  post_study:session.post_study||null,
-  study_mode:manifest.config.study_mode,
-  assignments:{pairs:session.pairs,attacks:session.attacks},
-  responses:session.answers
- };
+  return {format_version:'art-style-protection-github-pages-v8',study_title:manifest.config.study_title,participant_id:session.pid,artist:session.artist,created_at:session.created_at,completed_at:session.completed_at,consent:session.consent,verified_at:session.verified_at||null,study_mode:manifest.config.study_mode,assignments:{quality:session.quality,effectiveness:session.effectiveness,robustness:session.robustness},responses:session.answers};
 }
-
-function getServerPayload(){
- return {
-  pid:session.pid,
-  ...getResponsePayload()
- };
-}
-
 async function autosaveOnline(){
- const endpoint=manifest.config.response_endpoint;
- if(!endpoint)return false;
- try{
-  const res=await fetch(endpoint,{
-   method:'POST',
-   headers:{'Content-Type':'application/json','Accept':'application/json'},
-   body:JSON.stringify(getServerPayload()),
-   keepalive:true
-  });
-  if(!res.ok)throw Error('HTTP '+res.status);
-  session.last_autosaved_at=new Date().toISOString();
-  delete session.last_autosave_error;
-  save();
-  return true;
- }catch(e){
-  session.last_autosave_error=String(e&&e.message?e.message:e);
-  save();
-  console.warn('Autosave failed:',e);
-  return false;
- }
+  const endpoint=manifest.config.response_endpoint;if(!endpoint)return false;
+  try{const res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({pid:session.pid,...getResponsePayload()}),keepalive:true});if(!res.ok)throw new Error('HTTP '+res.status);session.last_autosaved_at=new Date().toISOString();delete session.last_autosave_error;save();return true;}catch(e){session.last_autosave_error=String(e?.message||e);save();console.warn('Autosave failed:',e);return false;}
 }
-
 async function submitOnline(){
- const endpoint=manifest.config.response_endpoint;
- const status=$('submissionStatus');
- if(!endpoint){
-  if(status)status.textContent='No collection endpoint configured. Please download and return your JSON file to the study administrator.';
-  return;
- }
- if(status)status.textContent='Sending final responses to the study collector…';
- try{
-  const res=await fetch(endpoint,{
-   method:'POST',
-   headers:{'Content-Type':'application/json','Accept':'application/json'},
-   body:JSON.stringify(getServerPayload()),
-   keepalive:true
-  });
-  if(!res.ok)throw Error('HTTP '+res.status);
-  session.uploaded_at=new Date().toISOString();
-  delete session.last_autosave_error;
-  save();
-  if(status)status.textContent='Responses submitted successfully.';
- }catch(e){
-  if(status)status.textContent='Online submission did not succeed ('+e.message+'). Please download the JSON file and contact the study administrator.';
- }
+  const endpoint=manifest.config.response_endpoint;
+  if(!endpoint){session.last_autosave_error='No response endpoint configured';save();return false;}
+  try{
+    const res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({pid:session.pid,...getResponsePayload()}),keepalive:true});
+    const responseText=await res.text().catch(()=> '');
+    if(!res.ok)throw new Error(`HTTP ${res.status}${responseText?`: ${responseText.slice(0,240)}`:''}`);
+    session.uploaded_at=new Date().toISOString();delete session.last_autosave_error;save();return true;
+  }catch(e){
+    session.last_autosave_error=String(e?.message||e);save();console.error('Final submission failed:',e);return false;
+  }
 }
 function renderFinish(){
- stage='finish';setHeader('Study completed',100,'Thank you for contributing to this research');
- const online=Boolean(manifest.config.response_endpoint);
- const status=session.uploaded_at?'Your responses were submitted successfully.':'Submitting your completed responses…';
- content.innerHTML=`<section class="finish-simple" aria-labelledby="finishTitle">
-  <div class="finish-simple-icon" aria-hidden="true">✓</div>
-  <span class="finish-simple-eyebrow">ART STYLE PROTECTION STUDY</span>
-  <h1 id="finishTitle">Thank you for participating!</h1>
-  <p class="finish-simple-lead">You have completed the study. Your contribution helps researchers understand how people perceive AI-generated art and artistic-style protection.</p>
-  <div class="finish-simple-rule"></div>
-  ${online?`<h2>Response submission</h2><p id="submissionStatus" role="status" aria-live="polite" class="finish-simple-status">${safe(status)}</p><button id="retrySubmission" type="button" class="finish-simple-download" ${session.uploaded_at?'hidden':''}>Retry submission</button>`:'<h2>Response submission unavailable</h2><p class="finish-simple-status">The study collection endpoint is not configured. Please contact the study administrator.</p>'}
-  <p class="finish-simple-reference">Participant ID: <code>${safe(session.pid)}</code></p>
- </section>`;
- if(online){
-  const retry=$('retrySubmission');
-  if(retry)retry.onclick=async()=>{retry.disabled=true;await submitOnline();retry.disabled=false;if(session.uploaded_at)retry.hidden=true};
-  if(!session.uploaded_at)submitOnline().then(()=>{if(session.uploaded_at&&retry)retry.hidden=true});
- }
- $('nextButton').disabled=true;
- $('nextButton').onclick=null;
- document.querySelector('footer.bottom').hidden=true;
+  stage='finish';session.progress.stage=stage;save();setHeader('Study completed',100);setBackButton(false);document.querySelector('footer.bottom').hidden=true;
+  content.innerHTML=`<section class="finish-simple"><div class="finish-simple-icon">✓</div><h1>Thank you for participating!</h1><p class="finish-simple-lead">You have completed the study.</p><p id="submissionStatus" class="finish-simple-status">Submitting your responses…</p><p class="finish-simple-reference">Participant ID: <code>${safe(session.pid)}</code></p><button id="retrySubmission" hidden>Retry submission</button></section>`;
+  const status=$('submissionStatus'),retry=$('retrySubmission');
+  const send=async()=>{retry.hidden=true;status.textContent='Submitting your responses…';const ok=await submitOnline();if(ok){status.textContent='Responses submitted successfully.';}else{status.textContent=`We could not submit your responses. ${session.last_autosave_error||'Please try again.'}`;retry.hidden=false;}};
+  retry.onclick=send;send();
 }
 
-function start(){const s=session.progress.stage;if(s==='declined')return renderDeclined();if(!session.consent?.consented)return renderConsent();if(!session.contact_collected||s==='participant_information')return renderParticipantInformation();if(!session.background||s==='background')return renderBackground();if(ARTIST_BACKGROUNDS.includes(session.background.art_background)&&(!session.artist_background||s==='artist_followup'))return renderArtistFollowup();if(s==='finish')return renderFinish();if(s==='post_study'||(s==='attacks'&&attackIndex>=study.attacks.length))return renderPostStudy();if(s==='practice')return renderPractice();if(s==='pairs')return renderPair();if(s==='attacks')return renderAttack();renderIntro()}
+function start(){
+  const s=session.progress.stage;
+  if(s==='declined')return renderDeclined();
+  if(!session.consent?.consented)return renderConsent();
+  if(!session.verified && s!=='intro' && s!=='practice' && s!=='quality' && s!=='effectiveness' && s!=='robustness' && s!=='finish')return renderVerify();
+  if(s==='finish')return renderFinish();
+  if(s==='practice')return renderPractice();
+  if(s==='quality')return renderQuality();
+  if(s==='effectiveness')return renderEffectiveness();
+  if(s==='robustness')return renderRobustness();
+  renderIntro();
+}
 start();

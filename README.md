@@ -1,10 +1,23 @@
-# Art Style Protection Study — static webpage package
+# Art Style Protection Study — redesigned GitHub Pages version
 
-This package contains the webpage code only. **The `data/` folder is intentionally excluded.** Copy your existing `data/` directory into the project root before building the manifest.
+This version keeps the visual language and familiarization page from the previous website, shortens onboarding, reduces practice to four questions, adds direct protected-artwork quality evaluation with magnification, changes protection effectiveness to seven-image sets, and simplifies robustness to one style-removal question.
 
-## Expected data layout
+## Study flow
 
-For every configured artist:
+1. Consent
+2. Cloudflare Turnstile human verification
+3. Artist familiarization — six large reference artworks
+4. Four short practice questions
+5. Protected artwork quality — original + six protected versions, with hover magnifier and click-to-enlarge
+6. Protection effectiveness — four prompts, each with 7 anonymous outputs (clean + six protection methods)
+7. Robustness — four anonymous conditions internally: protected/no-removal, DiffPure, Noisy Upscaling, IMPRESS++; each page shows six protected-method outputs and asks one question: which image least resembles the reference artist's style?
+8. Completion and Cloudflare response submission
+
+No final AI-attitude questionnaire is included.
+
+## Existing data hierarchy is preserved
+
+Keep your current directories exactly as they are:
 
 ```text
 data/artists/<artist>/
@@ -12,7 +25,6 @@ data/artists/<artist>/
 ├── prompts.json
 ├── references/
 ├── clean/
-│   ├── p01.png ... p04.png
 ├── protected/
 │   ├── glaze/
 │   ├── mist/
@@ -22,118 +34,104 @@ data/artists/<artist>/
 │   └── styleguard/
 └── removed/
     ├── diffpure/
-    │   ├── glaze/ mist/ antidb/ mirage/ metacloak/ styleguard/
     ├── impress++/
-    │   └── same six methods
     └── noisy_upscaling/
-        └── same six methods
 ```
 
-Section 4 uses only the six protected methods after removal. No clean image is shown in the robustness grid, and `removed/<attack>/clean/` is not required.
+The only additional material needed for the **direct protected-artwork-quality task** is a sibling folder. Existing folders are not renamed or moved:
 
-## What was fixed
+```text
+data/artists/<artist>/artwork_quality/
+├── original/
+│   ├── p01.png
+│   └── p02.png
+└── protected/
+    ├── glaze/p01.png ...
+    ├── mist/p01.png ...
+    ├── antidb/p01.png ...
+    ├── mirage/p01.png ...
+    ├── metacloak/p01.png ...
+    └── styleguard/p01.png ...
+```
 
-- Uses the five WikiArt artist folders in `config.json`.
-- Uses six protection methods: Glaze, Mist, AntiDB, Mirage, MetaCloak, StyleGuard.
-- Uses three removal attacks: DiffPure, Impress++, Noisy Upscaling.
-- Supports only four prompt IDs while still making **2 comparisons per method** by reusing prompts across methods.
-- Produces **12 pairwise trials** (6 methods × 2 prompts) when all six methods are present.
-- Produces **3 robustness grids**, one per removal method.
-- Robustness grids use only `removed/<attack>/<method>/<prompt>` for the six configured protection methods.
-- Image order and method order are randomized and blinded.
-- The builder validates the exact dataset requirements and reports missing methods/prompts.
-- Captions remain available for Section 3, but Section 4 uses exactly six robustness questions and does not add a caption-matching question.
-- New local-storage/session version prevents stale assignments from the old broken webpage from being reused.
-- Consent/evaluation counts are derived from the config instead of hard-coded old values.
+If `artwork_quality/original/p01.png` is absent, the code falls back to `references/p01.png`. This means you can reuse a reference artwork as the original if it is the exact image that was protected.
 
-## Setup
+## Practice-image paths
 
-1. Put this package at your GitHub Pages repository root.
-2. Copy your existing `data/` folder beside `index.html`.
-3. Check the dataset:
+The previous practice hierarchy is also preserved. This redesign uses only these existing folders:
+
+```text
+data/practice/quality/A.png
+data/practice/quality/B.png
+
+data/practice/style/A.png
+data/practice/style/B.png
+data/practice/style/references/01.png
+data/practice/style/references/02.png
+data/practice/style/references/03.png
+
+data/practice/prompt/A.png
+data/practice/prompt/B.png
+```
+
+## Build the manifest
+
+After placing your private `data/` folder next to `index.html`:
 
 ```bash
 python3 scripts/check_dataset.py
-```
-
-4. Build and validate the manifest:
-
-```bash
 python3 scripts/build_manifest.py
 ```
 
-If a configured image set is missing, the command exits with an error and tells you exactly what is missing. For debugging only, you can still write an incomplete manifest with:
-
-```bash
-python3 scripts/build_manifest.py --allow-incomplete
-```
-
-5. Test locally:
+Then test locally:
 
 ```bash
 python3 -m http.server 8000
 ```
 
-Open `http://localhost:8000/`.
+Open `http://localhost:8000`.
 
-## Current intended study configuration
+## Cloudflare response collection
 
-- 5 artists
-- 6 protection methods
-- 4 prompt IDs per artist
-- 2 clean-vs-protected comparisons per method = 12 pairwise screens
-- 3 robustness screens: DiffPure, Impress++, Noisy Upscaling
-- 6 reference artworks shown for the assigned artist
-- 15-second minimum familiarization
-
-`prompts.json` controls prompt text and captions. Example:
+Your existing endpoint is preserved in `config.json`:
 
 ```json
-[
-  {"id":"p01","text":"a mountain by sks","caption":"A mountain landscape."},
-  {"id":"p02","text":"a piano by sks","caption":"A piano."},
-  {"id":"p03","text":"a shoe by sks","caption":"A shoe."},
-  {"id":"p04","text":"a candle by sks","caption":"A candle."}
-]
+"response_endpoint": "https://mirage-response-api.irfanmeerza00185.workers.dev/submit"
 ```
 
-If `caption` is empty, the webpage automatically omits the caption-matching question for that trial.
+Responses are autosaved there during the study and submitted again at completion.
 
-## Important for your current data
+## Cloudflare Turnstile
 
-At the time this package was prepared, the uploaded dataset had populated Glaze, Mist, AntiDB, MetaCloak, and StyleGuard folders, but the configured **Mirage folders were empty**. Because Mirage is part of the six-method study design, `build_manifest.py` will correctly report this as incomplete until Mirage images are added under both `protected/mirage/` and every `removed/<attack>/mirage/` folder.
+`config.json` contains:
 
-## Publishing
+```json
+"turnstile_site_key": "1x00000000000000000000AA",
+"turnstile_verify_endpoint": ""
+```
 
-Commit these files plus your `data/` folder to the repository root and enable GitHub Pages from the `main` branch. `manifest.js` must be rebuilt whenever the data or config changes.
+The included site key is Cloudflare's development/test key so the UI can be tested immediately. Replace it with your production Turnstile site key before recruitment.
 
-Responses remain in the participant browser unless `response_endpoint` is configured. Responses are autosaved and submitted to the configured response endpoint. The participant-facing JSON download option has been removed.
+The page gates study entry on a successful Turnstile callback. For production-grade verification, set `turnstile_verify_endpoint` to your Worker route that validates the token server-side. The browser sends:
 
+```json
+{
+  "type": "turnstile_verify",
+  "token": "...",
+  "pid": "p_..."
+}
+```
 
-## Section 3 questionnaire (v5)
+and expects an HTTP 2xx response with JSON such as `{ "success": true }`.
 
-The pairwise protection evaluation now asks four questions: artist-style similarity, prompt matching, overall visual quality, and visible artifacts/distortions. Each question includes Image A, About the same, and Image B. Pairwise images are displayed as square 512×512 panels. A Back button is available during the main evaluation and final questionnaire so participants can revisit the preceding evaluation screen.
+## GitHub Pages
 
-## Section 4 questionnaire (v6)
+Commit the project files plus your data and generated `manifest.js`. In GitHub:
 
-The robustness evaluation now shows **only the six protected methods** after each removal attack. The clean image is not included in Section 4. The six blinded images correspond to Glaze, Mist, AntiDB, Mirage, MetaCloak, and StyleGuard, with their positions randomized independently for each robustness screen.
+**Settings → Pages → Deploy from a branch → main → /(root)**
 
-Section 4 asks the following six deliberately protection-oriented questions:
+`.nojekyll` is included.
 
-1. Which image contains the most visible noise?
-2. Which image contains the most visible artifacts or distortions?
-3. Which image has the least clear visual details?
-4. Which image matches the generation prompt the least?
-5. Which image has the lowest overall visual quality?
-6. Ignoring overall image quality, which image least resembles the reference artist's style?
+## Important blinding behavior
 
-The final question is the primary direct comparison of style-protection strength after removal. The other five questions help distinguish style suppression from general image degradation.
-
-Section 4 uses a three-column desktop grid rather than the previous four-column grid. Every image panel is square and preserves the native 512×512 aspect ratio, with a maximum displayed size of 512×512. The grid becomes two columns on medium screens and one column on small screens.
-
-The manifest builder validates robustness using only `removed/<attack>/<method>/<prompt>` for all six configured methods; it no longer requires a clean image for the Section 4 grid.
-
-
-## Practice images
-
-Practice questions now load images from `data/practice/` rather than using built-in SVG dummy images. Populate the exact paths listed in `data/practice/README.md` before running the study. Use holdout practice images that do not belong to any of the five evaluation artists and do not appear in the main evaluation.
+Participants never see protection-method names or robustness/removal-method names. Internally, the saved response JSON still records the true method and condition so the results can be analyzed later.
