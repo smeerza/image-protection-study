@@ -43,7 +43,7 @@ const PRACTICE = [
 
 function hashSeed(){ return crypto.randomUUID().replaceAll('-',''); }
 function shuffle(items){ const out=[...items]; for(let i=out.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[out[i],out[j]]=[out[j],out[i]];} return out; }
-function assignmentKey(){ return 'art_style_protection_session_v9'; }
+function assignmentKey(){ return 'art_style_protection_session_v10'; }
 function save(){ localStorage.setItem(assignmentKey(), JSON.stringify(session)); }
 function img(artist,key){ return manifest.artists?.[artist]?.images?.[key] || null; }
 function letters(n){ return 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.slice(0,n).split(''); }
@@ -103,7 +103,7 @@ function makeAssignment(){
 
     // Robustness: one no-removal baseline + the three configured attacks.
     // Every page shows only the six protected-method outputs. Attack identity is hidden in the UI.
-    const conditions=['no_attack',...ATTACKS];
+    const conditions=[...ATTACKS];
     const usedPromptIds=new Set();
     const robustness=[];
     let robustProblem=false;
