@@ -203,25 +203,43 @@ function renderVerify(){
   setTimeout(()=>{if(window.turnstile && $('turnstileMount') && !$('turnstileMount').querySelector('iframe')){try{turnstile.render('#turnstileMount',{sitekey:siteKey,callback:window.mirageTurnstilePassed,'expired-callback':window.mirageTurnstileExpired});}catch(_){}}},250);
 }
 
-
-async function compressProfileImage(file){
-  if(!file) return null;
-  if(!file.type.startsWith('image/')) throw new Error('Please choose an image file.');
-  if(file.size > 10*1024*1024) throw new Error('Please choose an image smaller than 10 MB.');
-  const dataUrl = await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(new Error('Could not read image.'));reader.readAsDataURL(file);});
-  const image = await new Promise((resolve,reject)=>{const im=new Image();im.onload=()=>resolve(im);im.onerror=()=>reject(new Error('Could not process image.'));im.src=dataUrl;});
-  const maxSide=420, scale=Math.min(1,maxSide/Math.max(image.naturalWidth,image.naturalHeight));
-  const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(image.naturalWidth*scale));canvas.height=Math.max(1,Math.round(image.naturalHeight*scale));
-  canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);
-  return canvas.toDataURL('image/jpeg',0.78);
-}
 function renderProfile(){
-  stage='profile';session.progress.stage=stage;save();setHeader('Participant profile',7);setBackButton(true,()=>{renderVerify();goTop();});
+  stage='profile'; session.progress.stage=stage; save(); setHeader('Participant profile',7);
+  setBackButton(true,()=>{renderVerify();goTop();});
   const p=session.participant_profile||{};
-  content.innerHTML=`<div class="background-layout"><div class="background-heading"><span class="background-kicker">PARTICIPANT INFORMATION</span><h1>A little about you</h1><p class="sub">The fields on this page are optional. You may leave them blank and continue.</p></div><form id="profileForm" class="background-card profile-card" novalidate><div class="profile-grid"><div class="profile-photo-block"><div id="profilePreview" class="profile-preview">${p.profile_image_data_url?`<img src="${p.profile_image_data_url}" alt="Profile preview">`:'<span>Optional image</span>'}</div><label class="profile-upload" for="profileImage">Choose image <span>(optional)</span></label><input id="profileImage" type="file" accept="image/*"><p class="tiny">If provided, the image is compressed in your browser before submission.</p></div><div class="participant-fields"><div class="participant-field"><label for="participantName">Name <span class="optional-label">(optional)</span></label><input id="participantName" type="text" maxlength="150" autocomplete="name" placeholder="Your name" value="${safe(p.name||'')}"></div><div class="profile-note"><strong>Why ask this?</strong><p>Optional profile information can help researchers distinguish voluntary participant records during study administration. It is not used to score your answers.</p></div></div></div><p id="profileError" class="background-error" role="alert" aria-live="polite"></p></form></div>`;
-  const fileInput=$('profileImage'), preview=$('profilePreview'), err=$('profileError');let photo=p.profile_image_data_url||null;
-  fileInput.onchange=async()=>{err.textContent='';const f=fileInput.files?.[0];if(!f){photo=null;preview.innerHTML='<span>Optional image</span>';return;}try{photo=await compressProfileImage(f);preview.innerHTML=`<img src="${photo}" alt="Profile preview">`;}catch(e){photo=null;fileInput.value='';preview.innerHTML='<span>Optional image</span>';err.textContent=e.message||'Could not process image.';}};
-  setButton(true,()=>{session.participant_profile={name:$('participantName').value.trim()||null,profile_image_data_url:photo,collected_at:new Date().toISOString()};session.progress.stage='background';save();renderBackground();goTop();});
+
+  content.innerHTML=`<div class="background-layout">
+    <div class="background-heading">
+      <span class="background-kicker">PARTICIPANT INFORMATION</span>
+      <h1>A little about you</h1>
+      <p class="sub">Both fields on this page are optional. You may leave them blank and continue.</p>
+    </div>
+    <form id="profileForm" class="background-card profile-card" novalidate>
+      <div class="participant-fields">
+        <div class="participant-field">
+          <label for="participantName">Name <span class="optional-label">(optional)</span></label>
+          <input id="participantName" type="text" maxlength="150" autocomplete="name" placeholder="Your name" value="${safe(p.name||'')}">
+        </div>
+        <div class="participant-field">
+          <label for="participantEmail">Email <span class="optional-label">(optional)</span></label>
+          <input id="participantEmail" type="email" maxlength="254" autocomplete="email" placeholder="you@example.com" value="${safe(p.email||'')}">
+        </div>
+        <div class="profile-note">
+          <strong>Optional information</strong>
+          <p>You can participate without providing your name or email. These fields are not used to score your study responses.</p>
+        </div>
+      </div>
+    </form>
+  </div>`;
+
+  setButton(true,()=>{
+    session.participant_profile={
+      name:$('participantName').value.trim()||null,
+      email:$('participantEmail').value.trim()||null,
+      collected_at:new Date().toISOString()
+    };
+    session.progress.stage='background'; save(); renderBackground(); goTop();
+  });
 }
 function renderBackground(){
   stage='background';session.progress.stage=stage;save();setHeader('Participant background',9);setBackButton(true,()=>{renderProfile();goTop();});
