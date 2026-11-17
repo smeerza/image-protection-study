@@ -173,12 +173,115 @@ function record(section,trial,answers){
 }
 function existing(section,id){ return session.answers.find(x=>x.section===section&&x.trial_id===id)?.answers||{}; }
 
+
 function renderConsent(){
-  stage='consent';session.progress.stage=stage;save();setHeader('Consent to participate',2);setBackButton(false);setButton(false);
-  content.innerHTML=`<section class="consent-simple"><p class="kicker">Research participation</p><h1>Art Style Protection Study</h1><p class="sub">You are invited to take part in a research study about how people perceive original, protected, and AI-generated artwork.</p><div class="consent-box"><h2>What you will do</h2><p>You will view artworks and AI-generated images, compare their visual quality and artistic style, and answer short visual-evaluation questions. The study is designed for desktop or laptop use.</p><h2>Time and risks</h2><p>The study is expected to take approximately 15–25 minutes. Risks are minimal and similar to ordinary computer use.</p><h2>Privacy</h2><p>Your responses are linked to a randomly generated participant ID and submitted to the study's research collection service. You may optionally provide a name and profile image; these are not required to participate. Background questions about art and generative AI are collected to help interpret the study results. Results may be reported in aggregate.</p><h2>Voluntary participation</h2><p>Participation is voluntary. You may stop at any time before completing the study.</p><div class="consent-actions"><button id="consentYes">I consent and wish to continue</button><button id="consentNo" class="quiet-button">I do not consent</button></div></div></section>`;
-  $('consentYes').onclick=()=>{session.consent={consented:true,at:new Date().toISOString()};session.progress.stage='verify';save();renderVerify();goTop();};
-  $('consentNo').onclick=()=>{session.consent={consented:false,at:new Date().toISOString()};session.progress.stage='declined';save();renderDeclined();};
+  stage='consent';
+  session.progress.stage=stage;
+  save();
+
+  setHeader('Consent to participate',2);
+  setBackButton(false);
+  setButton(false);
+
+  content.innerHTML=`
+    <section class="consent-simple">
+      <p class="kicker">Participant Consent Form</p>
+
+      <h1>Art Style Protection Study</h1>
+
+      <p class="sub">
+        You are invited to take part in a research study about
+        how people perceive original, protected, and AI-generated
+        artwork.
+      </p>
+
+      <div class="consent-box">
+
+        <h2>What you will do</h2>
+        <p>
+          You will view artworks and AI-generated images,
+          compare their visual quality and artistic style,
+          and answer short visual-evaluation questions.
+          The study is designed for desktop or laptop use.
+        </p>
+
+        <h2>Time and risks</h2>
+        <p>
+          The study is expected to take approximately
+          15-25 minutes. Risks are minimal and similar
+          to ordinary computer use.
+        </p>
+
+        <h2>Privacy</h2>
+        <p>
+          Your responses are linked to a randomly generated
+          participant ID and submitted to the study’s research
+          collection service. Background questions about art
+          and generative AI are collected to help interpret
+          the study results. Results may be reported in aggregate.
+        </p>
+
+        <h2>Voluntary participation</h2>
+        <p>
+          Participation is voluntary. You may decline or stop
+          before submitting the survey by closing the webpage.
+          After submission, because responses are not linked
+          to your identity, the research team will not be able
+          to identify and remove your individual responses.
+          Please decide whether you are comfortable with this
+          before proceeding.
+        </p>
+
+        <h2>Questions about the study</h2>
+        <p>
+          For any questions about the study, please email:
+          <a href="mailto:meerzas@vcu.edu">
+            meerzas@vcu.edu
+          </a>
+        </p>
+
+        <h2>Consent decision</h2>
+        <p>
+          Please select one of the following options on
+          the study website before proceeding:
+        </p>
+
+        <div class="consent-actions">
+          <button id="consentYes">
+            I consent and wish to continue
+          </button>
+
+          <button id="consentNo" class="quiet-button">
+            I do not consent
+          </button>
+        </div>
+
+      </div>
+    </section>
+  `;
+
+  $('consentYes').onclick=()=>{
+    session.consent={
+      consented:true,
+      at:new Date().toISOString()
+    };
+    session.progress.stage='verify';
+    save();
+    renderVerify();
+    goTop();
+  };
+
+  $('consentNo').onclick=()=>{
+    session.consent={
+      consented:false,
+      at:new Date().toISOString()
+    };
+    session.progress.stage='declined';
+    save();
+    renderDeclined();
+  };
 }
+
 function renderDeclined(){stage='declined';setHeader('Study closed',0);document.querySelector('footer.bottom').hidden=true;content.innerHTML=`<div class="center" style="padding:80px 10px"><h1>Participation declined</h1><p class="sub" style="margin:0 auto">No study evaluation will be collected.</p></div>`;}
 
 function renderVerify(){
