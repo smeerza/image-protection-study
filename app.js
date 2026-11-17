@@ -299,7 +299,7 @@ function renderVerify(){
         if(data.success===false) throw new Error('Verification rejected');
       }catch(e){ $('verifyStatus').textContent='Verification could not be confirmed. Please try again.'; setButton(false); return; }
     }
-    session.verified=true;session.verified_at=new Date().toISOString();save();setButton(true,()=>{renderProfile();goTop();});
+    session.verified=true;session.verified_at=new Date().toISOString();save();setButton(true,()=>{renderBackground();goTop();});
   };
   window.mirageTurnstileExpired=()=>{session.verified=false;save();$('verifyStatus').textContent='Verification expired. Please complete it again.';setButton(false);};
   // In case Turnstile loaded before this screen was rendered, explicitly render it.
@@ -345,7 +345,7 @@ function renderProfile(){
   });
 }
 function renderBackground(){
-  stage='background';session.progress.stage=stage;save();setHeader('Participant background',9);setBackButton(true,()=>{renderProfile();goTop();});
+  stage='background';session.progress.stage=stage;save();setHeader('Participant background',9);setBackButton(true,()=>{renderVerify();goTop();});
   const prev=session.background||{};const artOptions=['No experience','Casual/hobby experience','Art student','Part-time/freelance artist','Full-time/professional artist','Other'];const familiarityOptions=['Not at all familiar','Slightly familiar','Moderately familiar','Very familiar','Extremely familiar'];const frequencyOptions=['Never','Once or twice','Occasionally','Frequently','Very frequently'];
   const radioList=(name,items,selectedValue)=>items.map(v=>`<label class="background-option"><input type="radio" name="${name}" value="${safe(v)}" ${selectedValue===v?'checked':''}><span>${safe(v)}</span></label>`).join('');
   content.innerHTML=`<div class="background-layout"><div class="background-heading"><span class="background-kicker">PARTICIPANT BACKGROUND</span><h1>Your experience with art and generative AI</h1><p class="sub">Please answer five short questions. These responses help us understand the background of the people making the visual judgments.</p></div><form id="backgroundForm" class="background-card" novalidate><fieldset class="background-question"><legend><span class="background-number">01</span>Art background</legend><p>Which best describes your experience with creating visual art?</p><div class="background-options">${radioList('art_background',artOptions,prev.art_background)}</div><div id="otherArtWrap" class="background-other" ${prev.art_background==='Other'?'':'hidden'}><label for="otherArt">Please specify</label><input id="otherArt" type="text" maxlength="200" value="${safe(prev.art_background_other||'')}" placeholder="Describe your experience"></div></fieldset><fieldset class="background-question"><legend><span class="background-number">02</span>Familiarity with visual art</legend><p>How familiar are you with evaluating differences in visual-art style, composition, color, texture, and technique?</p><div class="background-options background-scale">${radioList('art_familiarity',familiarityOptions,prev.art_familiarity_label)}</div></fieldset><fieldset class="background-question"><legend><span class="background-number">03</span>Familiarity with generative AI</legend><p>How familiar are you with AI image-generation tools such as Stable Diffusion, Midjourney, or DALL·E?</p><div class="background-options background-scale">${radioList('ai_familiarity',familiarityOptions,prev.ai_familiarity_label)}</div></fieldset><fieldset class="background-question"><legend><span class="background-number">04</span>Experience using generative AI</legend><p>How often have you used AI image-generation tools?</p><div class="background-options">${radioList('ai_usage',frequencyOptions,prev.ai_usage)}</div></fieldset><fieldset class="background-question"><legend><span class="background-number">05</span>Familiarity with AI style mimicry</legend><p>Before this study, how familiar were you with using generative AI to imitate or reproduce an artist's visual style?</p><div class="background-options background-scale">${radioList('style_mimicry_familiarity',familiarityOptions,prev.style_mimicry_familiarity_label)}</div></fieldset><p id="backgroundError" class="background-error" role="alert" aria-live="polite"></p></form></div>`;
@@ -427,7 +427,7 @@ function renderRobustness(){
 }
 
 function getResponsePayload(){
-  return {format_version:'art-style-protection-github-pages-v9',study_title:manifest.config.study_title,participant_id:session.pid,artist:session.artist,created_at:session.created_at,completed_at:session.completed_at,consent:session.consent,verified_at:session.verified_at||null,participant_profile:session.participant_profile||null,background:session.background||null,artist_background:session.artist_background||null,study_mode:manifest.config.study_mode,assignments:{quality:session.quality,effectiveness:session.effectiveness,robustness:session.robustness},responses:session.answers};
+  return {format_version:'art-style-protection-github-pages-v9',study_title:manifest.config.study_title,participant_id:session.pid,artist:session.artist,created_at:session.created_at,completed_at:session.completed_at,consent:session.consent,verified_at:session.verified_at||null,background:session.background||null,artist_background:session.artist_background||null,study_mode:manifest.config.study_mode,assignments:{quality:session.quality,effectiveness:session.effectiveness,robustness:session.robustness},responses:session.answers};
 }
 async function autosaveOnline(){
   const endpoint=manifest.config.response_endpoint;if(!endpoint)return false;
@@ -458,7 +458,7 @@ function start(){
   if(s==='declined')return renderDeclined();
   if(!session.consent?.consented)return renderConsent();
   if(!session.verified)return renderVerify();
-  if(s==='profile')return renderProfile();
+  if(s==='profile')return renderBackground();
   if(s==='background')return renderBackground();
   if(s==='artist_followup')return renderArtistFollowup();
   if(s==='finish')return renderFinish();
@@ -466,7 +466,6 @@ function start(){
   if(s==='quality')return renderQuality();
   if(s==='effectiveness')return renderEffectiveness();
   if(s==='robustness')return renderRobustness();
-  if(!session.participant_profile)return renderProfile();
   if(!session.background)return renderBackground();
   if(ARTIST_BACKGROUNDS.has(session.background.art_background) && !session.artist_background)return renderArtistFollowup();
   renderIntro();
